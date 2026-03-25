@@ -21,7 +21,7 @@ app.get('/api/articles', async (c) => {
     const ids = c.req.query('ids');
     const offset = (page - 1) * limit;
 
-    // compact=1 → chỉ trả id, title, url, source_id, published_at (không full_text)
+    // compact=1 → chỉ trả id, title, url, source_id, published_at (không description/content)
     const fields = compact === '1'
         ? 'id, title, url, source_id, published_at'
         : '*';
@@ -84,9 +84,9 @@ app.patch('/api/articles/:id/read', async (c) => {
 
 /**
  * POST /api/articles/enrich
- * Fetch nội dung bài viết từ URL gốc cho các article chưa có full_text tốt.
+ * Fetch nội dung bài viết từ URL gốc cho các article chưa có content.
  * Body: { ids: ["id1", "id2", ...], force?: boolean }
- * Sẽ fetch song song (tối đa 5 cùng lúc) và update full_text vào DB.
+ * Sẽ fetch song song (tối đa 5 cùng lúc) và update content vào DB.
  */
 app.post('/api/articles/enrich', async (c) => {
     const body = await c.req.json();
@@ -99,7 +99,7 @@ app.post('/api/articles/enrich', async (c) => {
 
     const placeholders = ids.map(() => '?').join(',');
     const { results } = await c.env.DB.prepare(
-        `SELECT id, url, full_text FROM articles WHERE id IN (${placeholders})`
+        `SELECT id, url, description, content FROM articles WHERE id IN (${placeholders})`
     ).bind(...ids).all();
 
     if (!results || results.length === 0) {
@@ -109,7 +109,7 @@ app.post('/api/articles/enrich', async (c) => {
     const { extractArticleContent } = await import('../cron/scraper');
     const enrichResults: { id: string; success: boolean; chars: number; skipped?: boolean; note?: string }[] = [];
 
-    // Kiểm tra full_text có phải rác không
+    // Kiểm tra content có phải rác không
     function isLowQuality(text: string | null): boolean {
         if (!text || text.length < 100) return true;
         // HN RSS metadata
@@ -123,8 +123,8 @@ app.post('/api/articles/enrich', async (c) => {
     }
 
     // Trích xuất URL bài gốc từ HN RSS description
-    function extractHNArticleUrl(fullText: string): string | null {
-        const match = fullText.match(/Article URL:\s*<a href="([^"]+)"/);
+    function extractHNArticleUrl(description: string): string | null {
+        const match = description.match(/Article URL:\s*<a href="([^"]+)"/);
         return match ? match[1] : null;
     }
 
@@ -132,9 +132,9 @@ app.post('/api/articles/enrich', async (c) => {
     for (let i = 0; i < articles.length; i += 5) {
         const batch = articles.slice(i, i + 5);
         const promises = batch.map(async (art: any) => {
-            // Skip nếu đã có full_text tốt (trừ khi force=true)
-            if (!force && art.full_text && !isLowQuality(art.full_text)) {
-                return { id: art.id, success: true, chars: art.full_text.length, skipped: true };
+            // Skip nếu đã có content tốt (trừ khi force=true)
+            if (!force && art.content && !isLowQuality(art.content)) {
+                return { id: art.id, success: true, chars: art.content.length, skipped: true };
             }
 
             // Skip Reddit URLs (JS-rendered, không extract được)
@@ -146,12 +146,12 @@ app.post('/api/articles/enrich', async (c) => {
             let fetchUrl = art.url;
 
             // Nếu bài HN, lấy article URL thay vì HN page
-            if (art.full_text && extractHNArticleUrl(art.full_text)) {
-                fetchUrl = extractHNArticleUrl(art.full_text)!;
+            if (art.description && extractHNArticleUrl(art.description)) {
+                fetchUrl = extractHNArticleUrl(art.description)!;
             } else if (art.url.includes('news.ycombinator.com')) {
                 // Ask HN / Show HN — nội dung nằm trong RSS description, chỉ cần strip HTML
-                if (art.full_text) {
-                    const cleaned = art.full_text
+                if (art.description) {
+                    const cleaned = art.description
                         .replace(/<hr\s*\/?>/gi, '\n---\n')
                         .replace(/<p>/gi, '\n')
                         .replace(/<[^>]+>/g, '')
@@ -160,7 +160,7 @@ app.post('/api/articles/enrich', async (c) => {
                         .replace(/\n---\n[\s\S]*$/, '')
                         .trim();
                     if (cleaned.length > 50) {
-                        await c.env.DB.prepare('UPDATE articles SET full_text = ? WHERE id = ?')
+                        await c.env.DB.prepare('UPDATE articles SET content = ? WHERE id = ?')
                             .bind(cleaned, art.id).run();
                         return { id: art.id, success: true, chars: cleaned.length };
                     }
@@ -170,7 +170,7 @@ app.post('/api/articles/enrich', async (c) => {
 
             const content = await extractArticleContent(fetchUrl);
             if (content && content.length > 50) {
-                await c.env.DB.prepare('UPDATE articles SET full_text = ? WHERE id = ?')
+                await c.env.DB.prepare('UPDATE articles SET content = ? WHERE id = ?')
                     .bind(content, art.id).run();
                 return { id: art.id, success: true, chars: content.length };
             }
@@ -183,6 +183,40 @@ app.post('/api/articles/enrich', async (c) => {
 
     const enriched = enrichResults.filter(r => r.success && !r.skipped).length;
     return c.json({ ok: true, enriched, total: articles.length, results: enrichResults });
+});
+
+/**
+ * POST /api/articles/enqueue-scrape
+ * Enqueue articles chưa có content vào Queue để cào nội dung.
+ * Body (optional): { limit?: number, force?: boolean }
+ * - limit: số lượng tối đa (default 50)
+ * - force: true = enqueue cả những bài đã có content
+ */
+app.post('/api/articles/enqueue-scrape', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const limit = Math.min(body.limit || 50, 200);
+    const force = body.force === true;
+
+    const condition = force ? '1=1' : 'content IS NULL';
+    const { results } = await c.env.DB.prepare(
+        `SELECT id, url FROM articles WHERE ${condition} ORDER BY fetched_at DESC LIMIT ?`
+    ).bind(limit).all<{ id: string; url: string }>();
+
+    if (!results || results.length === 0) {
+        return c.json({ ok: true, enqueued: 0, message: 'No articles to scrape' });
+    }
+
+    // Enqueue in batches of 25 (Queue limit per sendBatch)
+    let enqueued = 0;
+    for (let i = 0; i < results.length; i += 25) {
+        const batch = results.slice(i, i + 25);
+        await c.env.CONTENT_QUEUE.sendBatch(
+            batch.map(a => ({ body: { articleId: a.id, url: a.url } }))
+        );
+        enqueued += batch.length;
+    }
+
+    return c.json({ ok: true, enqueued, message: `Enqueued ${enqueued} articles for content scraping` });
 });
 
 // ── Dify Integration ─────────────────────────────────────
@@ -324,9 +358,9 @@ app.post('/api/sources/:id/fetch', async (c) => {
         for (const art of articles) {
             const aId = crypto.randomUUID();
             const result = await c.env.DB.prepare(
-                `INSERT OR IGNORE INTO articles (id, source_id, url, title, full_text, published_at)
+                `INSERT OR IGNORE INTO articles (id, source_id, url, title, description, published_at)
                  VALUES (?, ?, ?, ?, ?, ?)`
-            ).bind(aId, source.id, art.url, art.title, art.full_text || '', art.published_at || new Date().toISOString()).run();
+            ).bind(aId, source.id, art.url, art.title, art.description || '', art.published_at || new Date().toISOString()).run();
 
             if (result.meta && result.meta.changes > 0) insertedCount++;
         }
@@ -356,9 +390,9 @@ app.post('/api/sources/fetch-all', async (c) => {
             for (const art of articles) {
                 const aId = crypto.randomUUID();
                 const result = await c.env.DB.prepare(
-                    `INSERT OR IGNORE INTO articles (id, source_id, url, title, full_text, published_at)
+                    `INSERT OR IGNORE INTO articles (id, source_id, url, title, description, published_at)
                      VALUES (?, ?, ?, ?, ?, ?)`
-                ).bind(aId, src.id, art.url, art.title, art.full_text || '', art.published_at || new Date().toISOString()).run();
+                ).bind(aId, src.id, art.url, art.title, art.description || '', art.published_at || new Date().toISOString()).run();
                 if (result.meta && result.meta.changes > 0) insertedCount++;
             }
             fetchResults.push({ source_id: src.id, name: src.name, fetched: articles.length, inserted: insertedCount });

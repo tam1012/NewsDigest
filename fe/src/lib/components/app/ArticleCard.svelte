@@ -58,7 +58,7 @@
   </CardHeader>
   <CardContent class="grow">
     <p class="text-sm text-muted-foreground line-clamp-3">
-      {article.summary || article.full_text || "Đang xử lý nội dung..."}
+      {article.summary || article.description || "Đang xử lý nội dung..."}
     </p>
     {#if tagsArray.length > 0}
       <div class="flex gap-2 flex-wrap mt-4">

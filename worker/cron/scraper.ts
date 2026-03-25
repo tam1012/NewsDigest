@@ -1,5 +1,6 @@
 import { XMLParser } from 'fast-xml-parser';
 import { Env, Source, ArticleInput } from '../types';
+import { getProfile } from './site-profiles';
 
 export async function fetchSource(source: Source, env: Env): Promise<ArticleInput[]> {
   const type = source.type;
@@ -32,7 +33,7 @@ async function fetchReddit(source: Source): Promise<ArticleInput[]> {
     return {
       url: `https://www.reddit.com${d.permalink}`,
       title: d.title,
-      full_text: d.selftext || '',
+      description: d.selftext || '',
       published_at: new Date(d.created_utc * 1000).toISOString()
     };
   });
@@ -65,7 +66,7 @@ async function fetchYouTube(source: Source, apiKey: string): Promise<ArticleInpu
     return {
       url: `https://www.youtube.com/watch?v=${item.contentDetails.videoId}`,
       title: snippet.title,
-      full_text: snippet.description,
+      description: snippet.description,
       published_at: snippet.publishedAt
     };
   });
@@ -99,7 +100,7 @@ async function fetchRSS(source: Source): Promise<ArticleInput[]> {
     return {
       url: link,
       title: item.title,
-      full_text: item.description || item.content || item['_text'] || '',
+      description: item.description || item.content || item['_text'] || '',
       published_at: item.pubDate || item.published || new Date().toISOString()
     };
   });
@@ -171,12 +172,16 @@ async function fetchUnknown(source: Source): Promise<ArticleInput[]> {
 
 /**
  * Fetch nội dung bài viết từ URL gốc.
- * Dùng HTMLRewriter để extract text từ content tags.
- * Focus vào <article>, <main>, hoặc body content.
+ * Dùng HTMLRewriter + SiteProfile để extract text chính xác theo từng site.
+ * contentSelectors dùng để scope vùng content (chỉ lấy text bên trong).
+ * removeSelectors dùng để xoá noise trước khi extract.
  * Giới hạn 5000 ký tự.
  */
 export async function extractArticleContent(url: string): Promise<string> {
   try {
+    const profile = getProfile(url);
+    const minLen = profile.minLength ?? 40;
+
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
@@ -196,7 +201,12 @@ export async function extractArticleContent(url: string): Promise<string> {
     let totalLen = 0;
     const MAX_CHARS = 5000;
 
-    // Decode HTML entities
+    // Track whether we're inside a content container
+    // depth > 0 means we're inside at least one matching content selector
+    let contentDepth = 0;
+    // If no contentSelector matched at all, we'll fallback to capturing everything
+    let anyContentSelectorMatched = false;
+
     function decodeEntities(s: string): string {
       return s
         .replace(/&amp;/g, '&')
@@ -209,56 +219,76 @@ export async function extractArticleContent(url: string): Promise<string> {
         .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec)));
     }
 
-    class ContentExtractor {
+    function flushParagraph() {
+      if (totalLen >= MAX_CHARS) return;
+      if (currentParagraph.trim()) {
+        const clean = decodeEntities(currentParagraph.trim());
+        if (clean.length >= minLen) {
+          paragraphs.push(clean);
+          totalLen += clean.length;
+        }
+      }
+      currentParagraph = '';
+    }
+
+    // Build rewriter
+    let rewriter = new HTMLRewriter();
+
+    // 1) Remove noise elements from profile
+    const removeSelector = profile.removeSelectors.join(', ');
+    if (removeSelector) {
+      rewriter = rewriter.on(removeSelector, {
+        element(el: Element) { el.remove(); }
+      });
+    }
+
+    // 2) Track content scope using contentSelectors
+    //    Enter → depth++, Leave (end tag) → depth--
+    const contentSelector = profile.contentSelectors.join(', ');
+    rewriter = rewriter.on(contentSelector, {
+      element(el: Element) {
+        contentDepth++;
+        anyContentSelectorMatched = true;
+        // Also flush paragraph at container boundary
+        flushParagraph();
+
+        el.onEndTag(() => {
+          flushParagraph();
+          contentDepth--;
+        });
+      }
+    });
+
+    // 3) Paragraph boundary detection
+    rewriter = rewriter.on('p, h1, h2, h3, h4, h5, h6, li, blockquote, figcaption, pre, div, section, article', {
+      element(_el: Element) {
+        flushParagraph();
+      }
+    });
+
+    // 4) Text extraction — only capture if inside content scope
+    rewriter = rewriter.on('p, h1, h2, h3, h4, h5, h6, li, blockquote, figcaption, pre, td, th, span, a, em, strong, b, i, code', {
       text(text: Text) {
         if (totalLen >= MAX_CHARS) return;
+        // Only capture text if we're inside a content container
+        if (contentDepth <= 0) return;
         const t = text.text.trim();
         if (t) {
           currentParagraph += ' ' + t;
         }
       }
-    }
-
-    class ParagraphHandler {
-      element(_el: Element) {
-        if (totalLen >= MAX_CHARS) return;
-        // Kết thúc paragraph trước
-        if (currentParagraph.trim()) {
-          const clean = decodeEntities(currentParagraph.trim());
-          // Bỏ qua đoạn text quá ngắn (menu items, buttons, etc.)
-          if (clean.length > 20) {
-            paragraphs.push(clean);
-            totalLen += clean.length;
-          }
-        }
-        currentParagraph = '';
-      }
-    }
-
-    const rewriter = new HTMLRewriter()
-      // Remove noise elements
-      .on('script, style, noscript, svg, iframe, form, button, input, select, textarea', {
-        element(el: Element) { el.remove(); }
-      })
-      .on('nav, header, footer, aside, [role="navigation"], [role="banner"], [role="contentinfo"]', {
-        element(el: Element) { el.remove(); }
-      })
-      .on('.ad, .ads, .advertisement, .sidebar, .menu, .nav, .cookie, .popup, .modal, .share, .social, .comments, .related, .recommended', {
-        element(el: Element) { el.remove(); }
-      })
-      // Handle paragraph boundaries
-      .on('p, h1, h2, h3, h4, h5, h6, li, blockquote, figcaption, pre, div, section, article', new ParagraphHandler())
-      // Extract text from content elements only
-      .on('p, h1, h2, h3, h4, h5, h6, li, blockquote, figcaption, pre, td, th', new ContentExtractor());
+    });
 
     await rewriter.transform(response).text();
 
     // Flush last paragraph
-    if (currentParagraph.trim()) {
-      const clean = decodeEntities(currentParagraph.trim());
-      if (clean.length > 20) {
-        paragraphs.push(clean);
-      }
+    flushParagraph();
+
+    // If no content selector matched at all, it means the page structure
+    // didn't match any profile selector. Return empty — the generic approach
+    // would just capture garbage anyway.
+    if (!anyContentSelectorMatched && paragraphs.length === 0) {
+      return '';
     }
 
     const result = paragraphs
@@ -267,8 +297,10 @@ export async function extractArticleContent(url: string): Promise<string> {
       .trim()
       .slice(0, MAX_CHARS);
 
+    console.log(`[scraper] ${profile.hostname}: extracted ${result.length} chars (${paragraphs.length} paragraphs)`);
     return result;
   } catch {
     return '';
   }
 }
+

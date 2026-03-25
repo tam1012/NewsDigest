@@ -4,7 +4,8 @@ export interface Article {
   url: string;
   title: string;
   summary: string | null;
-  full_text: string | null;
+  description: string | null;
+  content: string | null;
   hot_score: number | null;
   tags: string | null;
   published_at: string | null;

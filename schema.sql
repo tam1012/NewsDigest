@@ -25,7 +25,8 @@ CREATE TABLE articles (
   url         TEXT NOT NULL,
   title       TEXT NOT NULL,
   summary     TEXT,                     -- tóm tắt AI (nullable, điền sau)
-  full_text   TEXT,                     -- nội dung gốc (optional)
+  description TEXT,                     -- mô tả ngắn từ RSS/API
+  content     TEXT,                     -- nội dung đầy đủ được cào (optional)
   hot_score   INTEGER,                  -- 1–10, do AI chấm
   tags        TEXT,                     -- JSON array: ["AI", "Security"]
   published_at TEXT,

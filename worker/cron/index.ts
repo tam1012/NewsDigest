@@ -1,9 +1,12 @@
-import { Env, Source } from '../types';
+import { Env, Source, ContentScrapeMessage } from '../types';
 import { fetchSource } from './scraper';
 
+const BATCH_SIZE = 3; // Fetch 3 sources song song
+
 /**
- * Cron Worker — Round-robin: mỗi lần chỉ fetch 1 source.
- * Dùng KV lưu index nguồn tiếp theo cần fetch.
+ * Cron Worker — Fetch TẤT CẢ enabled sources mỗi lần chạy.
+ * Chạy song song theo batch để tránh quá tải.
+ * Sau khi insert, enqueue article URLs mới vào CONTENT_QUEUE để cào nội dung.
  */
 export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: ExecutionContext) {
   console.log(`Cron triggered at ${new Date().toISOString()}`);
@@ -17,46 +20,71 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
     return;
   }
 
-  // Round-robin: lấy index tiếp theo từ KV
-  const lastIndexStr = await env.SCRAPER_CONFIG.get("cron:next_index");
-  let nextIndex = lastIndexStr ? parseInt(lastIndexStr) : 0;
-  if (nextIndex >= sources.length) nextIndex = 0;
+  console.log(`Fetching ${sources.length} sources in batches of ${BATCH_SIZE}...`);
 
-  const source = sources[nextIndex];
-  console.log(`Processing source ${nextIndex + 1}/${sources.length}: ${source.name} (${source.url})`);
+  let totalFetched = 0;
+  let totalInserted = 0;
+  let totalEnqueued = 0;
+  let totalErrors = 0;
 
-  try {
-    const articles = await fetchSource(source, env);
+  // Xử lý từng batch
+  for (let i = 0; i < sources.length; i += BATCH_SIZE) {
+    const batch = sources.slice(i, i + BATCH_SIZE);
 
-    let insertedCount = 0;
-    for (const article of articles) {
-      if (!article.title || !article.url) continue;
+    const results = await Promise.allSettled(
+      batch.map(async (source) => {
+        const articles = await fetchSource(source, env);
 
-      const idValue = crypto.randomUUID();
-      const publishedAt = article.published_at || new Date().toISOString();
-      const fullText = article.full_text || null;
+        let insertedCount = 0;
+        const newArticles: ContentScrapeMessage[] = [];
 
-      const result = await env.DB.prepare(
-        `INSERT OR IGNORE INTO articles (id, source_id, url, title, full_text, published_at)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      ).bind(idValue, source.id, article.url, article.title, fullText, publishedAt).run();
+        for (const article of articles) {
+          if (!article.title || !article.url) continue;
 
-      if (result.meta && result.meta.changes > 0) {
-        insertedCount++;
+          const idValue = crypto.randomUUID();
+          const publishedAt = article.published_at || new Date().toISOString();
+          const description = article.description || null;
+
+          const result = await env.DB.prepare(
+            `INSERT OR IGNORE INTO articles (id, source_id, url, title, description, published_at)
+             VALUES (?, ?, ?, ?, ?, ?)`
+          ).bind(idValue, source.id, article.url, article.title, description, publishedAt).run();
+
+          if (result.meta && result.meta.changes > 0) {
+            insertedCount++;
+            newArticles.push({ articleId: idValue, url: article.url });
+          }
+        }
+
+        // Enqueue new articles for content scraping
+        if (newArticles.length > 0) {
+          await env.CONTENT_QUEUE.sendBatch(
+            newArticles.map(a => ({ body: a }))
+          );
+        }
+
+        // Cập nhật last_fetched_at
+        await env.DB.prepare(
+          "UPDATE sources SET last_fetched_at = ? WHERE id = ?"
+        ).bind(new Date().toISOString(), source.id).run();
+
+        return { name: source.name, fetched: articles.length, inserted: insertedCount, enqueued: newArticles.length };
+      })
+    );
+
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        const { name, fetched, inserted, enqueued } = result.value;
+        console.log(`✅ ${name}: Fetched ${fetched}, Inserted ${inserted} new, Enqueued ${enqueued} for scraping.`);
+        totalFetched += fetched;
+        totalInserted += inserted;
+        totalEnqueued += enqueued;
+      } else {
+        console.error(`❌ Error in batch:`, result.reason);
+        totalErrors++;
       }
     }
-
-    console.log(`Source ${source.name}: Fetched ${articles.length}, Inserted ${insertedCount} new.`);
-
-    await env.DB.prepare(
-      "UPDATE sources SET last_fetched_at = ? WHERE id = ?"
-    ).bind(new Date().toISOString(), source.id).run();
-
-  } catch (e) {
-    console.error(`Error fetching source ${source.name}:`, e);
   }
 
-  // Lưu index tiếp theo cho lần cron sau
-  await env.SCRAPER_CONFIG.put("cron:next_index", String(nextIndex + 1));
-  console.log(`Cron done. Next index: ${nextIndex + 1}`);
+  console.log(`Cron done. Total: ${totalFetched} fetched, ${totalInserted} inserted, ${totalEnqueued} enqueued, ${totalErrors} errors.`);
 }
