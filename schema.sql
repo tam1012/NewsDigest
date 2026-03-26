@@ -21,7 +21,7 @@ CREATE TABLE scraper_configs (
 -- Bài viết đã thu thập
 CREATE TABLE articles (
   id          TEXT PRIMARY KEY,         -- UUID
-  source_id   TEXT NOT NULL REFERENCES sources(id),
+  source_id   TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
   url         TEXT NOT NULL,
   title       TEXT NOT NULL,
   summary     TEXT,                     -- tóm tắt AI (nullable, điền sau)
@@ -31,8 +31,6 @@ CREATE TABLE articles (
   tags        TEXT,                     -- JSON array: ["AI", "Security"]
   published_at TEXT,
   fetched_at  TEXT NOT NULL DEFAULT (datetime('now')),
-  is_bookmarked INTEGER NOT NULL DEFAULT 0,
-  is_read     INTEGER NOT NULL DEFAULT 0,
   UNIQUE(source_id, url)               -- dedup theo source + url
 );
 

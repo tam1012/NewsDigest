@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { sources } from '$lib/stores/sources';
   import { Card, CardContent } from '$lib/components/ui/card';
   import { Switch } from '$lib/components/ui/switch';
@@ -7,21 +6,13 @@
   import { Input } from '$lib/components/ui/input';
   import { Plus, Trash2, RefreshCw } from 'lucide-svelte';
   import { api } from '$lib/api';
+  import { invalidateAll } from '$app/navigation';
 
-  let isLoading = $state(true);
+  let { data } = $props();
+
   let newUrl = $state('');
   let newName = $state('');
   let isAdding = $state(false);
-
-  onMount(async () => {
-    try {
-      const res = await fetch(api('/api/sources'));
-      const data = await res.json();
-      if (data.sources) {
-        $sources = data.sources;
-      }
-    } catch(e) {} finally { isLoading = false; }
-  });
 
   async function addSource() {
     if (!newUrl.trim()) return;
@@ -32,13 +23,13 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: newUrl, name: newName || undefined, group_name: 'General' })
       });
-      const data = await res.json();
-      if (data.ok && data.source) {
-        $sources = [...$sources, data.source];
+      const result = await res.json();
+      if (result.ok && result.source) {
         newUrl = '';
         newName = '';
         // Trigger first fetch for the new source
-        fetch(api(`/api/sources/${data.source.id}/fetch`), { method: 'POST' });
+        fetch(api(`/api/sources/${result.source.id}/fetch`), { method: 'POST' });
+        await invalidateAll();
       }
     } catch(e) {
       console.error('Failed to add source', e);
@@ -55,6 +46,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: newEnabled })
       });
+      // Optimistic update on store, then re-sync from server
       $sources = $sources.map(s => s.id === id ? { ...s, enabled: newEnabled ? 1 : 0 } : s);
     } catch(e) { console.error('Toggle failed', e); }
   }
@@ -91,12 +83,7 @@
   </div>
 </div>
 
-{#if isLoading}
-  <div class="animate-pulse flex flex-col gap-4">
-    <div class="h-20 bg-muted rounded-xl"></div>
-    <div class="h-20 bg-muted rounded-xl"></div>
-  </div>
-{:else if $sources.length === 0}
+{#if $sources.length === 0}
   <div class="py-20 text-center border rounded-lg border-dashed text-muted-foreground">
     Chưa có nguồn tin nào. Hãy thêm nguồn tin ở trên.
   </div>

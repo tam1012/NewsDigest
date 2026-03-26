@@ -2,6 +2,13 @@ import { XMLParser } from 'fast-xml-parser';
 import { Env, Source, ArticleInput } from '../types';
 import { getProfile } from './site-profiles';
 
+/** Chuẩn hoá mọi định dạng ngày (RFC 2822, ISO 8601…) về ISO 8601 UTC. */
+function normalizeDate(raw?: string | null): string {
+  if (!raw) return new Date().toISOString();
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
+
 export async function fetchSource(source: Source, env: Env): Promise<ArticleInput[]> {
   const type = source.type;
   if (type === 'reddit') {
@@ -72,7 +79,7 @@ async function fetchYouTube(source: Source, apiKey: string): Promise<ArticleInpu
       url: `https://www.youtube.com/watch?v=${item.contentDetails.videoId}`,
       title: snippet.title,
       description: snippet.description,
-      published_at: snippet.publishedAt
+      published_at: normalizeDate(snippet.publishedAt)
     };
   });
 }
@@ -106,7 +113,7 @@ async function fetchRSS(source: Source): Promise<ArticleInput[]> {
       url: link,
       title: item.title,
       description: item.description || item.content || item['_text'] || '',
-      published_at: item.pubDate || item.published || new Date().toISOString()
+      published_at: normalizeDate(item.pubDate || item.published)
     };
   });
 }

@@ -1,19 +1,32 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { prefs } from '$lib/stores/prefs';
-  import { api } from '$lib/api';
+  import { sources } from '$lib/stores/sources';
   import NavBar from '$lib/components/app/NavBar.svelte';
   import '../app.css';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { sources } from '$lib/stores/sources';
   import type { Snippet } from 'svelte';
 
-  let { children }: { children: Snippet } = $props();
+  let { data, children }: { data: any; children: Snippet } = $props();
 
   let mounted = $state(false);
 
-  onMount(async () => {
+  // Sync sources from load function to store (used by ArticleCard)
+  $effect(() => {
+    if (data.sources) {
+      $sources = data.sources;
+    }
+  });
+
+  // Redirect to onboarding if no sources
+  $effect(() => {
+    if (mounted && data.sources.length === 0 && $page.url.pathname !== '/onboarding') {
+      goto('/onboarding');
+    }
+  });
+
+  onMount(() => {
     const saved = localStorage.getItem('darkMode');
     if (saved !== null) {
         $prefs.darkMode = saved === 'true';
@@ -21,26 +34,6 @@
         $prefs.darkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
     }
     mounted = true;
-
-    try {
-      const res = await fetch(api('/api/sources'));
-      const data = await res.json();
-      if (data.sources) {
-        $sources = data.sources;
-        if (data.sources.length === 0 && $page.url.pathname !== '/onboarding') {
-          goto('/onboarding');
-        }
-      }
-    } catch(e) {
-      // Mock sources for testing when backend is unavailable
-      if ($sources.length === 0) {
-        $sources = [
-          { id: 'mock-1', url: 'https://news.ycombinator.com/rss', name: 'HackerNews', type: 'rss' as const, enabled: 1, group_name: 'Tech', last_fetched_at: null, created_at: new Date().toISOString() },
-          { id: 'mock-2', url: 'https://vnexpress.net/rss/tin-moi-nhat.rss', name: 'VnExpress', type: 'rss' as const, enabled: 1, group_name: 'News', last_fetched_at: null, created_at: new Date().toISOString() },
-          { id: 'mock-3', url: 'https://blog.cloudflare.com/rss/', name: 'Cloudflare Blog', type: 'rss' as const, enabled: 1, group_name: 'Tech', last_fetched_at: null, created_at: new Date().toISOString() },
-        ];
-      }
-    }
   });
 
   $effect(() => {

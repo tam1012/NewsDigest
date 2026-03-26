@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "svelte-kit": {
+      "source": "tomlord1122/tomtom-skill",
+      "sourceType": "github",
+      "computedHash": "248d46791445ab1c3e5cb994c7ff0b91f9fee270e3a229073773eca3ba689b90"
+    }
+  }
+}

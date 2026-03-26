@@ -1,22 +1,17 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { articles, isLoading, filters } from '$lib/stores/articles';
-  import { api } from '$lib/api';
-  import { sources } from '$lib/stores/sources';
+  import { filters } from '$lib/stores/articles';
   import ArticleCard from '$lib/components/app/ArticleCard.svelte';
   import { Button } from '$lib/components/ui/button';
   import { Badge } from '$lib/components/ui/badge';
-  import { LoaderCircle } from 'lucide-svelte';
   import type { Article } from '$lib/types';
 
   const TAGS = ['AI', 'Security', 'Tech', 'Business', 'Vietnam', 'World', 'Dev', 'Science', 'Crypto', 'Policy'];
 
-  let allArticles = $state<Article[]>([]);
-  let initialLoading = $state(true);
+  let { data } = $props();
 
-  // Filtered + sorted articles derived from local data — no API call on filter change
+  // Filtered + sorted articles derived from load data — no API call on filter change
   let filteredArticles = $derived.by(() => {
-    let result = allArticles;
+    let result: Article[] = data.articles;
 
     // Filter by tag
     if ($filters.tag) {
@@ -51,27 +46,6 @@
 
     return result;
   });
-  let fetchError = $state(false);
-
-  async function fetchAllArticles() {
-    initialLoading = true;
-    fetchError = false;
-    try {
-      const res = await fetch(api('/api/articles?limit=200&sort=date'));
-      const data = await res.json();
-      if (data.articles) {
-        allArticles = data.articles;
-        $articles = data.articles;
-      }
-    } catch (e) {
-      console.error('Failed to fetch articles', e);
-      fetchError = true;
-    } finally {
-      initialLoading = false;
-    }
-  }
-
-  onMount(fetchAllArticles);
 
   function setTag(tag: string) {
     $filters.tag = $filters.tag === tag ? '' : tag;
@@ -121,15 +95,11 @@
   {/if}
 </div>
 
-{#if initialLoading}
-  <div class="flex items-center justify-center py-24">
-    <LoaderCircle size={36} class="animate-spin text-primary" />
-  </div>
-{:else if fetchError}
+{#if data.error}
   <div class="py-20 text-center border rounded-lg border-dashed text-muted-foreground">
     ⚠️ Không thể kết nối tới server. Vui lòng kiểm tra lại kết nối hoặc thử lại sau.
     <br />
-    <button class="mt-4 text-primary underline text-sm" onclick={fetchAllArticles}>Thử lại</button>
+    <a href="/" class="mt-4 text-primary underline text-sm">Thử lại</a>
   </div>
 {:else if filteredArticles.length === 0}
   <div class="py-20 text-center border rounded-lg border-dashed text-muted-foreground">

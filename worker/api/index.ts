@@ -4,6 +4,13 @@ import { Env } from '../types';
 
 const app = new Hono<{ Bindings: Env }>();
 
+/** Chuẩn hoá published_at về ISO 8601 UTC. */
+function normalizeDate(raw?: string | null): string {
+  if (!raw) return new Date().toISOString();
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
+
 app.use('/api/*', cors());
 
 // ── Articles ─────────────────────────────────────────────
@@ -15,7 +22,7 @@ app.get('/api/articles', async (c) => {
     const sourceId = c.req.query('source_id') || '';
     const minHot = parseInt(c.req.query('min_hot') || '0');
     const sort = c.req.query('sort') === 'hot' ? 'hot_score DESC' : 'fetched_at DESC';
-    const bookmarked = c.req.query('bookmarked');
+
     const unsummarized = c.req.query('unsummarized');
     const compact = c.req.query('compact');
     const ids = c.req.query('ids');
@@ -41,7 +48,7 @@ app.get('/api/articles', async (c) => {
     if (tag) { where += ' AND tags LIKE ?'; binds.push(`%"${tag}"%`); }
     if (sourceId) { where += ' AND source_id = ?'; binds.push(sourceId); }
     if (minHot > 0) { where += ' AND hot_score >= ?'; binds.push(minHot); }
-    if (bookmarked === '1') { where += ' AND is_bookmarked = 1'; }
+
     if (unsummarized === '1') { where += ' AND summary IS NULL'; }
 
     const countStmt = c.env.DB.prepare(`SELECT COUNT(*) as total FROM articles ${where}`);
@@ -68,19 +75,7 @@ app.get('/api/articles/:id', async (c) => {
     return c.json({ article: results[0] });
 });
 
-app.patch('/api/articles/:id/bookmark', async (c) => {
-    const id = c.req.param('id');
-    const { bookmarked } = await c.req.json();
-    await c.env.DB.prepare('UPDATE articles SET is_bookmarked = ? WHERE id = ?')
-        .bind(bookmarked ? 1 : 0, id).run();
-    return c.json({ ok: true });
-});
 
-app.patch('/api/articles/:id/read', async (c) => {
-    const id = c.req.param('id');
-    await c.env.DB.prepare('UPDATE articles SET is_read = 1 WHERE id = ?').bind(id).run();
-    return c.json({ ok: true });
-});
 
 /**
  * POST /api/articles/enrich
@@ -363,7 +358,11 @@ app.patch('/api/sources/:id', async (c) => {
 
 app.delete('/api/sources/:id', async (c) => {
     const id = c.req.param('id');
-    await c.env.DB.prepare('DELETE FROM sources WHERE id = ?').bind(id).run();
+    // Xoá articles liên quan trước để tránh lỗi foreign key
+    await c.env.DB.batch([
+        c.env.DB.prepare('DELETE FROM articles WHERE source_id = ?').bind(id),
+        c.env.DB.prepare('DELETE FROM sources WHERE id = ?').bind(id),
+    ]);
     return c.json({ ok: true });
 });
 
@@ -382,7 +381,7 @@ app.post('/api/sources/:id/fetch', async (c) => {
             const result = await c.env.DB.prepare(
                 `INSERT OR IGNORE INTO articles (id, source_id, url, title, description, published_at)
                  VALUES (?, ?, ?, ?, ?, ?)`
-            ).bind(aId, source.id, art.url, art.title, art.description || '', art.published_at || new Date().toISOString()).run();
+            ).bind(aId, source.id, art.url, art.title, art.description || '', normalizeDate(art.published_at)).run();
 
             if (result.meta && result.meta.changes > 0) insertedCount++;
         }
@@ -414,7 +413,7 @@ app.post('/api/sources/fetch-all', async (c) => {
                 const result = await c.env.DB.prepare(
                     `INSERT OR IGNORE INTO articles (id, source_id, url, title, description, published_at)
                      VALUES (?, ?, ?, ?, ?, ?)`
-                ).bind(aId, src.id, art.url, art.title, art.description || '', art.published_at || new Date().toISOString()).run();
+                ).bind(aId, src.id, art.url, art.title, art.description || '', normalizeDate(art.published_at)).run();
                 if (result.meta && result.meta.changes > 0) insertedCount++;
             }
             fetchResults.push({ source_id: src.id, name: src.name, fetched: articles.length, inserted: insertedCount });

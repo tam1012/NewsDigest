@@ -13,14 +13,11 @@
   import { buttonVariants } from '$lib/components/ui/button/index.js'
   import HotBadge from './HotBadge.svelte'
   import {
-    Bookmark,
-    BookmarkCheck,
     ExternalLink,
     Sparkles,
   } from 'lucide-svelte'
   import type { Article } from '$lib/types'
   import { sources } from '$lib/stores/sources'
-  import { api } from '$lib/api'
   import { marked } from 'marked'
 
   let { article }: { article: Article } = $props()
@@ -49,30 +46,7 @@
     article.summary ? (marked.parse(article.summary) as string) : '',
   )
 
-  async function toggleBookmark() {
-    const newState = article.is_bookmarked ? 0 : 1
-    try {
-      await fetch(api(`/api/articles/${article.id}/bookmark`), {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookmarked: newState === 1 }),
-      })
-      article.is_bookmarked = newState
-    } catch (e) {
-      console.error('Bookmark failed', e)
-    }
-  }
-
-  async function markRead() {
-    if (article.is_read) return
-    try {
-      await fetch(api(`/api/articles/${article.id}/read`), { method: 'PATCH' })
-      article.is_read = 1
-    } catch (e) {}
-  }
-
   function openSummary() {
-    markRead()
     open = true
   }
 </script>
@@ -80,17 +54,6 @@
 <!-- Shared content for both Dialog and Drawer -->
 {#snippet summaryContent()}
   <div class="space-y-4">
-    <!-- Tags -->
-    <!-- {#if tagsArray.length > 0}
-      <div class="flex gap-2 flex-wrap">
-        {#each tagsArray as tag}
-          <Badge variant="outline" class="text-xs font-normal bg-secondary/50"
-            >{tag}</Badge
-          >
-        {/each}
-      </div>
-    {/if} -->
-
     <!-- AI Summary -->
     {#if article.summary}
       <div
@@ -106,7 +69,6 @@
       target="_blank"
       rel="noopener noreferrer"
       class={buttonVariants({ variant: 'outline', size: 'sm' })}
-      onclick={markRead}
     >
       Xem bài gốc
       <ExternalLink size={14} class="ml-1.5" />
@@ -115,9 +77,7 @@
 {/snippet}
 
 <Card
-  class="flex flex-col h-full hover:shadow-md transition-shadow {article.is_read
-    ? 'opacity-70'
-    : ''}"
+  class="flex flex-col h-full hover:shadow-md transition-shadow"
 >
   <CardHeader class="pb-2">
     <div class="flex justify-between items-start gap-4">
@@ -127,7 +87,6 @@
           target="_blank"
           rel="noopener noreferrer"
           class="hover:underline"
-          onclick={markRead}
         >
           {article.title}
         </a>
@@ -166,21 +125,8 @@
   </CardContent>
 
   <CardFooter
-    class="pt-4 border-t flex justify-between items-center text-sm text-muted-foreground"
+    class="pt-4 border-t flex justify-end items-center text-sm text-muted-foreground"
   >
-    <button
-      class="flex items-center gap-1 hover:text-foreground transition-colors group"
-      onclick={toggleBookmark}
-    >
-      {#if article.is_bookmarked}
-        <BookmarkCheck size={16} class="fill-current text-primary" />
-        <span class="text-primary">Đã lưu</span>
-      {:else}
-        <Bookmark size={16} class="group-hover:fill-current" />
-        Lưu
-      {/if}
-    </button>
-
     {#if hasSummary}
       <!-- Responsive Dialog: Dialog on desktop, Drawer on mobile -->
       {#if isDesktop.current}
@@ -243,7 +189,6 @@
         target="_blank"
         rel="noopener noreferrer"
         class="flex items-center gap-1 hover:text-foreground transition-colors"
-        onclick={markRead}
       >
         Chi tiết
         <ExternalLink size={14} />

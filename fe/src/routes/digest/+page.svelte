@@ -1,32 +1,10 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
   import { ScrollArea } from '$lib/components/ui/scroll-area';
   import ArticleCard from '$lib/components/app/ArticleCard.svelte';
   import { Bot } from 'lucide-svelte';
-  import { api } from '$lib/api';
 
-  let digest: any = $state(null);
-  let topArticles: any[] = $state([]);
-  let isLoading = $state(true);
-  let errorStr = $state("");
-
-  onMount(async () => {
-    try {
-      const res = await fetch(api('/api/digest/latest'));
-      const data = await res.json();
-      if (data.error) {
-        errorStr = data.error;
-      } else {
-        digest = data.digest;
-        topArticles = data.topArticles;
-      }
-    } catch (e) {
-      errorStr = "Failed to load digest";
-    } finally {
-      isLoading = false;
-    }
-  });
+  let { data } = $props();
 </script>
 
 <svelte:head>
@@ -38,23 +16,18 @@
   <p class="text-muted-foreground mt-1">Tổng quan tự động mỗi giờ về xu hướng nổi bật.</p>
 </div>
 
-{#if isLoading}
-  <div class="animate-pulse space-y-4">
-    <div class="h-32 bg-muted rounded-xl"></div>
-    <div class="h-64 bg-muted rounded-xl"></div>
-  </div>
-{:else if errorStr}
-  <div class="py-12 text-center text-muted-foreground border-dashed border rounded-xl">{errorStr}</div>
-{:else if digest}
+{#if data.error}
+  <div class="py-12 text-center text-muted-foreground border-dashed border rounded-xl">{data.error}</div>
+{:else if data.digest}
   <Card class="mb-8 border-primary/20 bg-linear-to-br from-primary/5 to-transparent">
     <CardHeader class="pb-3 border-b border-primary/10">
       <CardTitle class="flex items-center gap-2 text-primary">
         <Bot size={24} /> 
-        Nhận định AI - {new Date(digest.created_at).toLocaleString('vi-VN')}
+        Nhận định AI - {new Date(data.digest.created_at).toLocaleString('vi-VN')}
       </CardTitle>
     </CardHeader>
     <CardContent class="pt-6">
-      <p class="text-lg leading-relaxed font-medium">"{digest.summary_text}"</p>
+      <p class="text-lg leading-relaxed font-medium">"{data.digest.summary_text}"</p>
     </CardContent>
   </Card>
 
@@ -62,7 +35,7 @@
   
   <ScrollArea class="h-[600px] w-full pr-4 pb-4">
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {#each topArticles as article}
+      {#each data.topArticles as article}
         <ArticleCard {article} />
       {/each}
     </div>

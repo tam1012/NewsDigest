@@ -1,6 +1,13 @@
 import { Env, Source, ContentScrapeMessage } from '../types';
 import { fetchSource } from './scraper';
 
+/** Chuẩn hoá published_at về ISO 8601 UTC trước khi insert. */
+function normalizePublishedAt(raw?: string | null): string {
+  if (!raw) return new Date().toISOString();
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
+
 const BATCH_SIZE = 3; // Fetch 3 sources song song
 
 /**
@@ -43,7 +50,7 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
           if (!article.title || !article.url) continue;
 
           const idValue = crypto.randomUUID();
-          const publishedAt = article.published_at || new Date().toISOString();
+          const publishedAt = normalizePublishedAt(article.published_at);
           const description = article.description || null;
 
           const result = await env.DB.prepare(

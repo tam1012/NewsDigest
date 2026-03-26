@@ -11,8 +11,6 @@ export interface Article {
   tags: string | null;
   published_at: string | null;
   fetched_at: string;
-  is_bookmarked: number;
-  is_read: number;
 }
 
 export interface Source {

@@ -1,10 +1,21 @@
 <script lang="ts">
   import { prefs } from '$lib/stores/prefs';
+  import { page } from '$app/stores';
   import { Button } from '$lib/components/ui/button';
   import { Moon, Sun, Settings } from 'lucide-svelte';
 
+  const navLinks = [
+    { href: '/', label: 'Tin tức' },
+    { href: '/digest', label: 'Báo cáo' },
+    { href: '/sources', label: 'Nguồn tin' },
+  ];
+
   function toggleDark() {
     $prefs.darkMode = !$prefs.darkMode;
+  }
+
+  function isActive(href: string, pathname: string) {
+    return href === '/' ? pathname === '/' : pathname.startsWith(href);
   }
 </script>
 
@@ -15,10 +26,9 @@
         <span class="font-bold sm:inline-block">NewsDigest</span>
       </a>
       <nav class="hidden md:flex gap-6 text-sm font-medium">
-        <a href="/" class="transition-colors hover:text-foreground/80 text-foreground">Tin tức</a>
-        <a href="/digest" class="transition-colors hover:text-foreground/80 text-foreground/60">Báo cáo</a>
-        <a href="/bookmarks" class="transition-colors hover:text-foreground/80 text-foreground/60">Đã lưu</a>
-        <a href="/sources" class="transition-colors hover:text-foreground/80 text-foreground/60">Nguồn tin</a>
+        {#each navLinks as { href, label }}
+          <a {href} class="transition-colors hover:text-foreground/80 {isActive(href, $page.url.pathname) ? 'text-foreground' : 'text-foreground/60'}">{label}</a>
+        {/each}
       </nav>
     </div>
     
