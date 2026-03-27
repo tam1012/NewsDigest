@@ -65,7 +65,7 @@
 
 <div
   class="min-h-screen"
-  style="background: linear-gradient(to right, #F5F4EC 50%, #FAF9F6 50%);"
+  style="background: linear-gradient(to right, var(--color-bg-1) 50%, var(--color-bg-2) 50%);"
 >
   {@render children()}
 </div>

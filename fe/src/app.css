@@ -22,6 +22,8 @@
   --color-text-main: hsl(var(--text-main));
   --color-text-main-2: hsl(var(--text-main-2));
   --color-text-secondary: hsl(var(--text-secondary));
+  --color-bg-1: hsl(var(--bg-1));
+  --color-bg-2: hsl(var(--bg-2));
 
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));
@@ -58,6 +60,8 @@
   --text-main: 60 2.521% 23.33%;
   --text-main-2: 60 2.564% 7.647%;
   --text-secondary: 51.43 3.139% 43.73%;
+  --bg-1: 50 11.11% 93.92%;
+  --bg-2: 50 10% 96.86%;
   --foreground: 222.2 84% 4.9%;
   --muted: 210 40% 96.1%;
   --muted-foreground: 215.4 16.3% 46.9%;
@@ -83,13 +87,18 @@
 .dark {
   --background: 222.2 84% 4.9%;
   --foreground: 210 40% 98%;
+  --text-main: 50 10% 96.86%;
+  --text-main-2: 48 5.26% 73.92%;
+  --text-secondary: 48 3.33% 59.02%;
+  --bg-1: 60 2.22% 13.14%;
+  --bg-2: 60 1.89% 16.47%;
   --muted: 217.2 32.6% 17.5%;
   --muted-foreground: 215 20.2% 65.1%;
   --popover: 222.2 84% 4.9%;
   --popover-foreground: 210 40% 98%;
   --card: 222.2 84% 4.9%;
   --card-foreground: 210 40% 98%;
-  --border: 217.2 32.6% 17.5%;
+  --border: 45 3% 24%;
   --input: 217.2 32.6% 17.5%;
   --primary: 210 40% 98%;
   --primary-foreground: 222.2 47.4% 11.2%;

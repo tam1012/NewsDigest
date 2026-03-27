@@ -1,12 +1,15 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
   import { filters } from '$lib/stores/articles'
+  import { prefs } from '$lib/stores/prefs'
   import {
     ChevronLeft,
     ChevronRight,
     ExternalLink,
+    Moon,
     Settings,
     Sparkles,
+    Sun,
   } from 'lucide-svelte'
   import type { Article } from '$lib/types'
   import { sources } from '$lib/stores/sources'
@@ -82,14 +85,10 @@
     if (data.currentDate !== currentDatasetId) {
       currentDatasetId = data.currentDate
       if (innerWidth >= 768) {
-        if (data.digest) {
-          sideView = 'digest'
-          selectedArticle = null
-        } else if (filteredArticles.length > 0) {
-          sideView = 'list'
+        sideView = 'list'
+        if (filteredArticles.length > 0) {
           selectedArticle = filteredArticles[0]
         } else {
-          sideView = 'list'
           selectedArticle = null
         }
       } else {
@@ -111,16 +110,21 @@
   let parsedDigestHtml = $derived.by(() => {
     if (!data.digest?.summary_text) return ''
     // Replace <id:uuid> in raw markdown BEFORE marked parses it
-    const processed = data.digest.summary_text.replace(/<id:([a-f0-9-]+)>/gi, (_match, id) => {
-      const article = (data.articles || []).find((a: Article) => a.id === id)
-      const title = article?.title || 'Bài viết'
-      return `<button class="digest-article-ref" data-article-id="${id}">↗</button>`
-    })
+    const processed = data.digest.summary_text.replace(
+      /<id:([a-f0-9-]+)>/gi,
+      (_match, id) => {
+        const article = (data.articles || []).find((a: Article) => a.id === id)
+        const title = article?.title || 'Bài viết'
+        return `<button class="digest-article-ref" data-article-id="${id}">↗</button>`
+      },
+    )
     return marked.parse(processed) as string
   })
 
   function handleDigestClick(e: MouseEvent) {
-    const target = (e.target as HTMLElement).closest('.digest-article-ref') as HTMLElement | null
+    const target = (e.target as HTMLElement).closest(
+      '.digest-article-ref',
+    ) as HTMLElement | null
     if (!target) return
     const articleId = target.dataset.articleId
     if (!articleId) return
@@ -141,7 +145,7 @@
     <nav class=" absolute z-10 flex justify-between px-6 top-6 left-0 right-0">
       <div class="flex gap-1">
         <CusButton onclick={() => goToDate(-1)} class="size-8">
-          <ChevronLeft size={20} />
+          <ChevronLeft class=" -translate-x-px" size={20} />
         </CusButton>
         <CusButton class="h-8 w-24 text-sm">{formattedDate}</CusButton>
         <CusButton onclick={() => goToDate(1)} class="size-8" disabled={isToday}
@@ -159,8 +163,16 @@
           {#if sideView === 'digest'}
             <div
               class="col-start-1 row-start-1"
-              in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
-              out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+              in:slideScaleFade={{
+                duration: 250,
+                startScale: 0.5,
+                startOpacity: 0,
+              }}
+              out:slideScaleFade={{
+                duration: 200,
+                startScale: 0.5,
+                startOpacity: 0,
+              }}
             >
               <!-- List icon -->
               <svg
@@ -179,8 +191,16 @@
           {:else}
             <div
               class="col-start-1 row-start-1"
-              in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
-              out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+              in:slideScaleFade={{
+                duration: 250,
+                startScale: 0.5,
+                startOpacity: 0,
+              }}
+              out:slideScaleFade={{
+                duration: 200,
+                startScale: 0.5,
+                startOpacity: 0,
+              }}
             >
               <!-- Sparkle/Digest icon -->
               <svg
@@ -200,7 +220,8 @@
       </CusButton>
     </nav>
     <div
-      class="left-0 z-5 absolute right-2.5 top-0 h-24 bg-linear-to-b from-[#F5F4EC] from-10% to-[#F5F4EC]/0"
+      class="left-0 z-5 absolute right-2.5 top-0 h-24"
+      style="background: linear-gradient(to bottom, var(--color-bg-1) 10%, transparent);"
     ></div>
     <!-- Aside Content: Digest or Article List -->
     <OverlayScrollbarsComponent
@@ -260,7 +281,9 @@
               <p class="text-sm text-text-secondary leading-relaxed">
                 {article.description_vn ||
                   article.description ||
-                  article.summary?.replace(/<[^>]*>?/gm, '').substring(0, 150) ||
+                  article.summary
+                    ?.replace(/<[^>]*>?/gm, '')
+                    .substring(0, 150) ||
                   'Đang xử lý nội dung...'}
               </p>
             </div>
@@ -281,7 +304,8 @@
     element="main"
     defer
     options={{ scrollbars: { autoHide: 'leave', autoHideDelay: 300 } }}
-    class="flex-1 py-6 px-16 bg-[#FAF9F6]"
+    class="flex-1 py-6 px-16"
+    style="background-color: var(--color-bg-2);"
   >
     {#if selectedArticle}
       <div class="flex gap-1">
@@ -296,6 +320,16 @@
           >
             <ExternalLink size={16} /></CusButton
           >
+          <CusButton
+            onclick={() => ($prefs.darkMode = !$prefs.darkMode)}
+            class="size-8"
+          >
+            {#if $prefs.darkMode}
+              <Sun size={16} />
+            {:else}
+              <Moon size={16} />
+            {/if}
+          </CusButton>
         </div>
       </div>
       <h1
