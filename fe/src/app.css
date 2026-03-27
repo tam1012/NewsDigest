@@ -12,6 +12,8 @@
   --color-ring: hsl(var(--ring));
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
+  --color-text-main: hsl(var(--text-main));
+  --color-text-secondary: hsl(var(--text-secondary));
 
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));
@@ -44,6 +46,8 @@
 
 :root {
   --background: 0 0% 100%;
+  --text-main: 60 2.521% 23.33%;
+  --text-secondary: 51.43 3.139% 43.73%;
   --foreground: 222.2 84% 4.9%;
   --muted: 210 40% 96.1%;
   --muted-foreground: 215.4 16.3% 46.9%;
@@ -51,7 +55,7 @@
   --popover-foreground: 222.2 84% 4.9%;
   --card: 0 0% 100%;
   --card-foreground: 222.2 84% 4.9%;
-  --border: 214.3 31.8% 91.4%;
+  --border: 50 12% 80%; 
   --input: 214.3 31.8% 91.4%;
   --primary: 222.2 47.4% 11.2%;
   --primary-foreground: 210 40% 98%;
@@ -117,6 +121,30 @@ aside[data-overlayscrollbars] {
   position: sticky !important;
 }
 
+.article-item::after {
+  content: '';
+  position: absolute;
+  left: -1.5rem;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-radius: 1rem 0 0 1rem;
+  background-color: var(--color-border);
+}
+
+.article-selected::after {
+  animation: indicator-slide-in 0.3s ease forwards;
+}
+
+@keyframes indicator-slide-in {
+  from {
+    width: 0;
+  }
+  to {
+    width: 0.5rem;
+  }
+}
+
 .cus-button {
   border-radius: 100px;
   display: flex;
@@ -126,6 +154,7 @@ aside[data-overlayscrollbars] {
   border: 1px solid white;
   cursor: pointer;
   transition: all 0.3s ease;
+  box-shadow: 0 8px 16px rgba(73, 71, 69, 0.03), 0 4px 8px rgba(73, 71, 69, 0.03);
 }
 
 .cus-button:active {

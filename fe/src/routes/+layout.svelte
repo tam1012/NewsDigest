@@ -64,7 +64,8 @@
 </script>
 
 <div
-  class="min-h-screen bg-[#f0eee6] dark:bg-zinc-950 font-sans text-zinc-900 dark:text-zinc-100 selection:bg-zinc-200 dark:selection:bg-zinc-800"
+  class="min-h-screen"
+  style="background: linear-gradient(to right, #F5F4EC 50%, #FAF9F6 50%);"
 >
   {@render children()}
 </div>
