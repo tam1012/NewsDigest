@@ -1,9 +1,6 @@
 import { api } from '$lib/api';
 import type { Article, Digest } from '$lib/types';
 
-// Override layout's prerender — this page is dynamic (date-based)
-export const prerender = false;
-
 export async function load({ fetch, url }) {
   // Read date from URL or default to today (local timezone)
   const dateParam = url.searchParams.get('date');

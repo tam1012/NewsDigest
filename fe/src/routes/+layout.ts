@@ -1,7 +1,6 @@
 import { api } from '$lib/api';
 import type { Source } from '$lib/types';
 
-export const prerender = true;
 export const ssr = false;
 
 export async function load({ fetch }) {
