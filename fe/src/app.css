@@ -148,6 +148,22 @@ aside[data-overlayscrollbars] {
   position: sticky !important;
 }
 
+/* OverlayScrollbars handle colors */
+.os-scrollbar-handle {
+  background: hsl(50 5% 75%) !important;
+}
+.os-scrollbar-handle:hover,
+.os-scrollbar-handle:active {
+  background: hsl(50 5% 65%) !important;
+}
+.dark .os-scrollbar-handle {
+  background: hsl(50 3% 30%) !important;
+}
+.dark .os-scrollbar-handle:hover,
+.dark .os-scrollbar-handle:active {
+  background: hsl(50 3% 40%) !important;
+}
+
 .article-item::after {
   content: '';
   position: absolute;

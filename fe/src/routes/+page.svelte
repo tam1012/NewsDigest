@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte'
   import { goto } from '$app/navigation'
   import { filters } from '$lib/stores/articles'
   import { prefs } from '$lib/stores/prefs'
@@ -69,9 +70,33 @@
     }
     return result
   })
-
   let sideView: 'list' | 'digest' = $state('list')
   let selectedArticle: Article | null = $state(null)
+
+  // State to track scroll preservation
+  let lastScrollInfo = $state({ articleId: null as string | null })
+
+  // Effect to scroll to top when selectedArticle changes
+  $effect(() => {
+    const article = selectedArticle
+    if (article) {
+      tick().then(() => {
+        const shouldScroll = article.id !== lastScrollInfo.articleId
+        if (shouldScroll) {
+          // VP0 is the body-level OverlayScrollbars viewport (from +layout.svelte)
+          // It's the first viewport in the DOM and the actual scroll container
+          const viewport = document.querySelectorAll(
+            '[data-overlayscrollbars-viewport]',
+          )[0] as HTMLElement | undefined
+
+          if (viewport) {
+            viewport.scrollTo({ top: 0, behavior: 'instant' })
+          }
+          lastScrollInfo = { articleId: article.id }
+        }
+      })
+    }
+  })
 
   // automatically select the first article when articles load on desktop
   let innerWidth = $state(
@@ -95,11 +120,46 @@
         sideView = 'list'
         selectedArticle = null
       }
+      // Reset scroll for both aside (VP1) and main (VP0) when date changes
+      tick().then(() => {
+        const viewports = document.querySelectorAll('[data-overlayscrollbars-viewport]')
+        viewports[0]?.scrollTo({ top: 0, behavior: 'instant' }) // body/main
+        viewports[1]?.scrollTo({ top: 0, behavior: 'instant' }) // aside
+      })
     }
   })
 
   function selectArticle(a: Article) {
     selectedArticle = a
+  }
+
+  function goToPrevArticle() {
+    if (!selectedArticle || filteredArticles.length === 0) return
+    const idx = filteredArticles.findIndex((a) => a.id === selectedArticle!.id)
+    if (idx > 0) {
+      selectedArticle = filteredArticles[idx - 1]
+    }
+  }
+
+  function goToNextArticle() {
+    if (!selectedArticle || filteredArticles.length === 0) return
+    const idx = filteredArticles.findIndex((a) => a.id === selectedArticle!.id)
+    if (idx < filteredArticles.length - 1) {
+      selectedArticle = filteredArticles[idx + 1]
+    }
+  }
+
+  function handleKeydown(e: KeyboardEvent) {
+    // Don't navigate if user is typing in an input/textarea
+    const tag = (e.target as HTMLElement)?.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault()
+      goToPrevArticle()
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault()
+      goToNextArticle()
+    }
   }
 
   function getSourceName(id: string) {
@@ -133,7 +193,7 @@
   }
 </script>
 
-<svelte:window bind:innerWidth />
+<svelte:window bind:innerWidth onkeydown={handleKeydown} />
 
 <svelte:head>
   <title>NewsDigest - {formattedDate}</title>
@@ -145,11 +205,11 @@
     <nav class=" absolute z-10 flex justify-between px-6 top-6 left-0 right-0">
       <div class="flex gap-1">
         <CusButton onclick={() => goToDate(-1)} class="size-8">
-          <ChevronLeft class=" -translate-x-px" size={20} />
+          <ChevronLeft class="-translate-x-px" size={20} />
         </CusButton>
         <CusButton class="h-8 w-24 text-sm">{formattedDate}</CusButton>
         <CusButton onclick={() => goToDate(1)} class="size-8" disabled={isToday}
-          ><ChevronRight size={20} />
+          ><ChevronRight class="translate-x-px" size={20} />
         </CusButton>
       </div>
       <!-- svelte-ignore a11y_consider_explicit_label -->
@@ -309,8 +369,12 @@
   >
     {#if selectedArticle}
       <div class="flex gap-1">
-        <CusButton class="size-8"><ChevronLeft size={20} /></CusButton>
-        <CusButton class="size-8"><ChevronRight size={20} /></CusButton>
+        <CusButton onclick={goToPrevArticle} disabled={!selectedArticle || filteredArticles.findIndex((a) => a.id === selectedArticle?.id) <= 0} class="size-8"
+          ><ChevronLeft class="-translate-x-px" size={20} /></CusButton
+        >
+        <CusButton onclick={goToNextArticle} disabled={!selectedArticle || filteredArticles.findIndex((a) => a.id === selectedArticle?.id) >= filteredArticles.length - 1} class="size-8"
+          ><ChevronRight class="translate-x-px" size={20} /></CusButton
+        >
         <div class="ml-auto flex gap-1">
           <CusButton
             href={selectedArticle.url}
