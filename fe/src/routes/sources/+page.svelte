@@ -16,6 +16,7 @@
   let isAdding = $state(false);
   let loading = $state(true);
   let adminKey = $state('');
+  let adminKeyInput = $state('');
   let authError = $state('');
   let showKeyInput = $state(false);
 
@@ -45,6 +46,8 @@
   }
 
   function saveAdminKey() {
+    if (!adminKeyInput.trim()) return;
+    adminKey = adminKeyInput.trim();
     if (browser) {
       localStorage.setItem(ADMIN_KEY_STORAGE, adminKey);
     }
@@ -54,6 +57,7 @@
 
   function clearAdminKey() {
     adminKey = '';
+    adminKeyInput = '';
     if (browser) localStorage.removeItem(ADMIN_KEY_STORAGE);
     authError = '';
   }
@@ -160,7 +164,7 @@
         {#if showKeyInput}
           <Input
             type="password"
-            bind:value={adminKey}
+            bind:value={adminKeyInput}
             placeholder="Admin key..."
             class="w-48 h-8 text-sm"
             onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && saveAdminKey()}
