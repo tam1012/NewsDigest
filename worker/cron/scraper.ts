@@ -77,19 +77,28 @@ async function fetchYouTube(source: Source, apiKey: string): Promise<ArticleInpu
     throw new Error(`Could not find uploads playlist for YouTube source ${source.url}`);
   }
 
-  const res = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${playlistId}&maxResults=10&key=${apiKey}`);
+  const res = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${playlistId}&maxResults=5&key=${apiKey}`);
   const data: any = await res.json();
   const items = data.items || [];
-  
-  return items.map((item: any) => {
-    const snippet = item.snippet;
-    return {
-      url: `https://www.youtube.com/watch?v=${item.contentDetails.videoId}`,
-      title: snippet.title,
-      description: snippet.description,
-      published_at: normalizeDate(snippet.publishedAt)
-    };
-  });
+
+  // Chỉ lấy video trong 3 ngày gần nhất
+  const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+
+  return items
+    .filter((item: any) => {
+      const publishedAt = new Date(item.snippet.publishedAt);
+      return publishedAt >= threeDaysAgo;
+    })
+    .slice(0, 2) // Giới hạn tối đa 2 video
+    .map((item: any) => {
+      const snippet = item.snippet;
+      return {
+        url: `https://www.youtube.com/watch?v=${item.contentDetails.videoId}`,
+        title: snippet.title,
+        description: snippet.description,
+        published_at: normalizeDate(snippet.publishedAt)
+      };
+    });
 }
 
 async function fetchRSS(source: Source): Promise<ArticleInput[]> {

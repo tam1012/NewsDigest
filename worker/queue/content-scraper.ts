@@ -145,6 +145,16 @@ export async function handleContentQueue(
     const { articleId, url, title } = message.body;
 
     try {
+      // Skip if article already has a summary (e.g. duplicate enqueue)
+      const { results: existing } = await env.DB.prepare(
+        "SELECT summary FROM articles WHERE id = ?"
+      ).bind(articleId).all();
+      if (existing?.[0] && (existing[0] as any).summary) {
+        console.log(`⏭️ Skipping "${title}" — already summarized`);
+        message.ack();
+        continue;
+      }
+
       let content = '';
 
       if (url.includes('youtube.com') || url.includes('youtu.be')) {

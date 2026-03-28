@@ -31,7 +31,8 @@
   let loading = $state(true)
   let unsummarizedCount = $state(0)
   let resummarizing = $state(false)
-  let resummarizeResult: { summarized: number; failed: number } | null = $state(null)
+  let resummarizeResult: { summarized: number; failed: number; enqueued: number } | null = $state(null)
+  let isAdmin = $state(false)
 
   // ── Mobile / Drawer state ──────────────────────────────────
   let drawerOpen = $state(false)
@@ -87,6 +88,9 @@
 
   onMount(() => {
     fetchSources()
+    // Check admin auth from localStorage (shared with /sources page)
+    const savedKey = localStorage.getItem('newsdigest_admin_key')
+    isAdmin = !!savedKey && savedKey.trim().length > 0
   })
 
   // Resummarize handler
@@ -98,9 +102,17 @@
       const res = await fetch('/api/resummarize', { method: 'POST' })
       const result = await res.json()
       if (result.ok !== false) {
-        resummarizeResult = { summarized: result.summarized ?? 0, failed: result.failed ?? 0 }
-        // Reload data after a short delay
-        setTimeout(() => fetchData(data.currentDate), 500)
+        resummarizeResult = {
+          summarized: result.summarized ?? 0,
+          failed: result.failed ?? 0,
+          enqueued: result.enqueued ?? 0,
+        }
+        // Hide button immediately — articles are enqueued, no need to click again
+        unsummarizedCount = 0
+        // Reload data after a short delay to pick up any instant resummarizations
+        setTimeout(() => fetchData(data.currentDate), 1500)
+        // Also reload again after queue processing might have completed
+        setTimeout(() => fetchData(data.currentDate), 10000)
       }
     } catch (e) {
       console.error('Resummarize failed', e)
@@ -296,7 +308,7 @@
       </CusButton>
     </div>
     <div class="flex gap-1">
-      {#if unsummarizedCount > 0}
+      {#if isAdmin && unsummarizedCount > 0}
         <!-- svelte-ignore a11y_consider_explicit_label -->
         <CusButton
           onclick={handleResummarize}
@@ -501,7 +513,7 @@
         </CusButton>
       </div>
       <div class="flex gap-1">
-        {#if unsummarizedCount > 0}
+        {#if isAdmin && unsummarizedCount > 0}
           <!-- svelte-ignore a11y_consider_explicit_label -->
           <CusButton
             onclick={handleResummarize}
