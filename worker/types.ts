@@ -6,6 +6,7 @@ export interface Env {
   VAPID_PUBLIC_KEY: string;
   VAPID_PRIVATE_KEY: string;
   YOUTUBE_API_KEY: string;
+  RAPIDAPI_KEY: string;
   CONTENT_SERVICE_URL: string;
   CONTENT_SERVICE_KEY: string;
   AI_GATEWAY_TOKEN: string;   // single token (fallback)

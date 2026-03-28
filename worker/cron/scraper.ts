@@ -37,16 +37,24 @@ async function fetchReddit(source: Source): Promise<ArticleInput[]> {
   
   return children
     .filter((item: any) => !item.data.stickied) // Skip pinned posts
+    .filter((item: any) => {
+      const d = item.data;
+      // Lọc bài ít tương tác: cần ít nhất 50 upvotes HOẶC 15 comments
+      return d.score >= 50 || d.num_comments >= 15;
+    })
     .map((item: any) => {
       const d = item.data;
-      const meta = `⬆${d.score} 💬${d.num_comments} r/${d.subreddit}`;
+      const postedAt = new Date(d.created_utc * 1000).toISOString();
+      const meta = `⬆${d.score} 💬${d.num_comments} r/${d.subreddit} 📅${postedAt.slice(0, 10)}`;
       return {
         url: `https://www.reddit.com${d.permalink}`,
         title: d.title,
         description: d.selftext
           ? `${meta}\n${d.selftext.slice(0, 300)}`
           : meta,
-        published_at: new Date(d.created_utc * 1000).toISOString()
+        // Dùng thời gian fetch (now) thay vì created_utc
+        // → bài hot hôm nay sẽ luôn hiện khi lọc theo "hôm nay"
+        published_at: new Date().toISOString()
       };
     });
 }

@@ -53,10 +53,23 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
           const publishedAt = normalizePublishedAt(article.published_at);
           const description = article.description || null;
 
-          const result = await env.DB.prepare(
-            `INSERT OR IGNORE INTO articles (id, source_id, url, title, description, published_at)
-             VALUES (?, ?, ?, ?, ?, ?)`
-          ).bind(idValue, source.id, article.url, article.title, description, publishedAt).run();
+          let result;
+          if (source.type === 'reddit') {
+            // Reddit: upsert — cập nhật engagement (description) + thời gian khi bài tái xuất hiện
+            result = await env.DB.prepare(
+              `INSERT INTO articles (id, source_id, url, title, description, published_at)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(source_id, url) DO UPDATE SET
+                 description = excluded.description,
+                 published_at = excluded.published_at`
+            ).bind(idValue, source.id, article.url, article.title, description, publishedAt).run();
+          } else {
+            // Non-Reddit: giữ dedup cứng
+            result = await env.DB.prepare(
+              `INSERT OR IGNORE INTO articles (id, source_id, url, title, description, published_at)
+               VALUES (?, ?, ?, ?, ?, ?)`
+            ).bind(idValue, source.id, article.url, article.title, description, publishedAt).run();
+          }
 
           if (result.meta && result.meta.changes > 0) {
             insertedCount++;

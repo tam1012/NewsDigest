@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { tick } from 'svelte'
+  import { tick, onMount } from 'svelte'
+  import { browser } from '$app/environment'
   import { goto } from '$app/navigation'
   import { filters } from '$lib/stores/articles'
   import { prefs } from '$lib/stores/prefs'
@@ -7,19 +8,102 @@
     ChevronLeft,
     ChevronRight,
     ExternalLink,
+    Loader2,
     Moon,
-    Settings,
+    RefreshCw,
     Sparkles,
     Sun,
   } from 'lucide-svelte'
-  import type { Article } from '$lib/types'
+  import type { Article, Digest } from '$lib/types'
   import { sources } from '$lib/stores/sources'
+  import { api } from '$lib/api'
   import { marked } from 'marked'
   import { OverlayScrollbarsComponent } from 'overlayscrollbars-svelte'
   import { slideScaleFade } from '$lib/transitions/slideScaleFade'
   import CusButton from '$lib/components/ui/CusButton.svelte'
 
   let { data } = $props()
+
+  // ── Client-side data state ──────────────────────────────────
+  let articles: Article[] = $state([])
+  let digest: Digest | null = $state(null)
+  let loading = $state(true)
+  let unsummarizedCount = $state(0)
+  let resummarizing = $state(false)
+  let resummarizeResult: { summarized: number; failed: number } | null = $state(null)
+
+  // Fetch articles + digest client-side
+  async function fetchData(date: string) {
+    loading = true
+    try {
+      const dayStart = new Date(`${date}T00:00:00`)
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
+      const from = dayStart.toISOString()
+      const to = dayEnd.toISOString()
+
+      const [articlesRes, digestRes] = await Promise.all([
+        fetch(api(`/api/articles?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=200&sort=date`)),
+        fetch(api(`/api/digest?date=${date}`))
+      ])
+
+      const articlesData = await articlesRes.json()
+      const digestData = await digestRes.json()
+
+      articles = (articlesData.articles ?? []) as Article[]
+      digest = (digestData.digest ?? null) as Digest | null
+
+      // Count unsummarized articles
+      unsummarizedCount = articles.filter(a => !a.summary).length
+    } catch (e) {
+      console.error('Failed to fetch data', e)
+      articles = []
+      digest = null
+    } finally {
+      loading = false
+    }
+  }
+
+  // Also fetch sources client-side
+  async function fetchSources() {
+    try {
+      const res = await fetch(api('/api/sources'))
+      const data = await res.json()
+      $sources = data.sources ?? []
+    } catch (e) {
+      console.error('Failed to fetch sources', e)
+    }
+  }
+
+  // Trigger on mount and when currentDate changes
+  $effect(() => {
+    if (browser) {
+      fetchData(data.currentDate)
+    }
+  })
+
+  onMount(() => {
+    fetchSources()
+  })
+
+  // Resummarize handler
+  async function handleResummarize() {
+    if (resummarizing) return
+    resummarizing = true
+    resummarizeResult = null
+    try {
+      const res = await fetch('/api/resummarize', { method: 'POST' })
+      const result = await res.json()
+      if (result.ok !== false) {
+        resummarizeResult = { summarized: result.summarized ?? 0, failed: result.failed ?? 0 }
+        // Reload data after a short delay
+        setTimeout(() => fetchData(data.currentDate), 500)
+      }
+    } catch (e) {
+      console.error('Resummarize failed', e)
+    } finally {
+      resummarizing = false
+    }
+  }
 
   let todayStr = $derived.by(() => {
     const now = new Date()
@@ -50,9 +134,7 @@
   }
 
   let filteredArticles = $derived.by(() => {
-    let result: Article[] = data.articles || []
-    // Keep it simple for now, can apply existing filters logic if needed
-    // The design is minimalistic so we don't display tag chips, but we'll apply them if they exist in state.
+    let result: Article[] = articles
     if ($filters.tag) {
       result = result.filter((a) => {
         try {
@@ -83,8 +165,6 @@
       tick().then(() => {
         const shouldScroll = article.id !== lastScrollInfo.articleId
         if (shouldScroll) {
-          // VP0 is the body-level OverlayScrollbars viewport (from +layout.svelte)
-          // It's the first viewport in the DOM and the actual scroll container
           const viewport = document.querySelectorAll(
             '[data-overlayscrollbars-viewport]',
           )[0] as HTMLElement | undefined
@@ -106,8 +186,8 @@
   let currentDatasetId = $state('')
 
   $effect(() => {
-    // Whenever the date changes, pick an initial selection for desktop
-    if (data.currentDate !== currentDatasetId) {
+    // Whenever articles finish loading, pick an initial selection for desktop
+    if (!loading && data.currentDate !== currentDatasetId) {
       currentDatasetId = data.currentDate
       if (innerWidth >= 768) {
         sideView = 'list'
@@ -123,8 +203,8 @@
       // Reset scroll for both aside (VP1) and main (VP0) when date changes
       tick().then(() => {
         const viewports = document.querySelectorAll('[data-overlayscrollbars-viewport]')
-        viewports[0]?.scrollTo({ top: 0, behavior: 'instant' }) // body/main
-        viewports[1]?.scrollTo({ top: 0, behavior: 'instant' }) // aside
+        viewports[0]?.scrollTo({ top: 0, behavior: 'instant' })
+        viewports[1]?.scrollTo({ top: 0, behavior: 'instant' })
       })
     }
   })
@@ -150,7 +230,6 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    // Don't navigate if user is typing in an input/textarea
     const tag = (e.target as HTMLElement)?.tagName
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
     if (e.key === 'ArrowLeft') {
@@ -168,13 +247,10 @@
 
   // Parse digest summary_text: replace <id:uuid> with clickable article anchors
   let parsedDigestHtml = $derived.by(() => {
-    if (!data.digest?.summary_text) return ''
-    // Replace <id:uuid> in raw markdown BEFORE marked parses it
-    const processed = data.digest.summary_text.replace(
+    if (!digest?.summary_text) return ''
+    const processed = digest.summary_text.replace(
       /<id:([a-f0-9-]+)>/gi,
-      (_match, id) => {
-        const article = (data.articles || []).find((a: Article) => a.id === id)
-        const title = article?.title || 'Bài viết'
+      (_match: string, id: string) => {
         return `<button class="digest-article-ref" data-article-id="${id}">↗</button>`
       },
     )
@@ -188,7 +264,7 @@
     if (!target) return
     const articleId = target.dataset.articleId
     if (!articleId) return
-    const article = (data.articles || []).find((a) => a.id === articleId)
+    const article = articles.find((a) => a.id === articleId)
     if (article) selectArticle(article)
   }
 </script>
@@ -212,72 +288,93 @@
           ><ChevronRight class="translate-x-px" size={20} />
         </CusButton>
       </div>
-      <!-- svelte-ignore a11y_consider_explicit_label -->
-      <CusButton
-        onclick={() => {
-          sideView = sideView === 'digest' ? 'list' : 'digest'
-        }}
-        class="size-8"
-      >
-        <div class="grid place-items-center">
-          {#if sideView === 'digest'}
-            <div
-              class="col-start-1 row-start-1"
-              in:slideScaleFade={{
-                duration: 250,
-                startScale: 0.5,
-                startOpacity: 0,
-              }}
-              out:slideScaleFade={{
-                duration: 200,
-                startScale: 0.5,
-                startOpacity: 0,
-              }}
-            >
-              <!-- List icon -->
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-                class="size-5"
+      <div class="flex gap-1">
+        {#if unsummarizedCount > 0}
+          <!-- svelte-ignore a11y_consider_explicit_label -->
+          <CusButton
+            onclick={handleResummarize}
+            disabled={resummarizing}
+            class="h-8 px-2 text-xs gap-1"
+          >
+            {#if resummarizing}
+              <Loader2 size={14} class="animate-spin" />
+            {:else}
+              <Sparkles size={14} />
+            {/if}
+            <span>{resummarizing ? 'Đang xử lý...' : `AI (${unsummarizedCount})`}</span>
+          </CusButton>
+        {/if}
+        <!-- svelte-ignore a11y_consider_explicit_label -->
+        <CusButton
+          onclick={() => {
+            sideView = sideView === 'digest' ? 'list' : 'digest'
+            tick().then(() => {
+              const viewports = document.querySelectorAll('[data-overlayscrollbars-viewport]')
+              viewports[1]?.scrollTo({ top: 0, behavior: 'instant' })
+            })
+          }}
+          class="size-8"
+        >
+          <div class="grid place-items-center">
+            {#if sideView === 'digest'}
+              <div
+                class="col-start-1 row-start-1"
+                in:slideScaleFade={{
+                  duration: 250,
+                  startScale: 0.5,
+                  startOpacity: 0,
+                }}
+                out:slideScaleFade={{
+                  duration: 200,
+                  startScale: 0.5,
+                  startOpacity: 0,
+                }}
               >
-                <path
-                  fill-rule="evenodd"
-                  d="M6 4.75A.75.75 0 0 1 6.75 4h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 4.75ZM6 10a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 10Zm0 5.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75ZM1.99 4.75a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 15.25a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 10a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1V10Z"
-                  clip-rule="evenodd"
-                />
-              </svg>
-            </div>
-          {:else}
-            <div
-              class="col-start-1 row-start-1"
-              in:slideScaleFade={{
-                duration: 250,
-                startScale: 0.5,
-                startOpacity: 0,
-              }}
-              out:slideScaleFade={{
-                duration: 200,
-                startScale: 0.5,
-                startOpacity: 0,
-              }}
-            >
-              <!-- Sparkle/Digest icon -->
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-              >
-                <path
+                <!-- List icon -->
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
                   fill="currentColor"
-                  d="M7.53 1.282a.5.5 0 0 1 .94 0l.478 1.306a7.5 7.5 0 0 0 4.464 4.464l1.305.478a.5.5 0 0 1 0 .94l-1.305.478a7.5 7.5 0 0 0-4.464 4.464l-.478 1.305a.5.5 0 0 1-.94 0l-.478-1.305a7.5 7.5 0 0 0-4.464-4.464L1.282 8.47a.5.5 0 0 1 0-.94l1.306-.478a7.5 7.5 0 0 0 4.464-4.464Z"
-                />
-              </svg>
-            </div>
-          {/if}
-        </div>
-      </CusButton>
+                  class="size-5"
+                >
+                  <path
+                    fill-rule="evenodd"
+                    d="M6 4.75A.75.75 0 0 1 6.75 4h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 4.75ZM6 10a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 10Zm0 5.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75ZM1.99 4.75a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 15.25a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 10a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1V10Z"
+                    clip-rule="evenodd"
+                  />
+                </svg>
+              </div>
+            {:else}
+              <div
+                class="col-start-1 row-start-1"
+                in:slideScaleFade={{
+                  duration: 250,
+                  startScale: 0.5,
+                  startOpacity: 0,
+                }}
+                out:slideScaleFade={{
+                  duration: 200,
+                  startScale: 0.5,
+                  startOpacity: 0,
+                }}
+              >
+                <!-- Sparkle/Digest icon -->
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                >
+                  <path
+                    fill="currentColor"
+                    d="M7.53 1.282a.5.5 0 0 1 .94 0l.478 1.306a7.5 7.5 0 0 0 4.464 4.464l1.305.478a.5.5 0 0 1 0 .94l-1.305.478a7.5 7.5 0 0 0-4.464 4.464l-.478 1.305a.5.5 0 0 1-.94 0l-.478-1.305a7.5 7.5 0 0 0-4.464-4.464L1.282 8.47a.5.5 0 0 1 0-.94l1.306-.478a7.5 7.5 0 0 0 4.464-4.464Z"
+                  />
+                </svg>
+              </div>
+            {/if}
+          </div>
+        </CusButton>
+      </div>
     </nav>
     <div
       class="left-0 z-5 absolute right-2.5 top-0 h-24"
@@ -289,8 +386,23 @@
       options={{ scrollbars: { autoHide: 'leave', autoHideDelay: 300 } }}
       class="px-6 py-24"
     >
-      {#if sideView === 'digest'}
-        {#if data.digest}
+      {#if loading}
+        <!-- Loading skeleton -->
+        <div class="flex flex-col gap-8 animate-pulse">
+          {#each Array(6) as _}
+            <div>
+              <div class="flex items-center gap-2 mb-2">
+                <div class="h-3 w-20 rounded bg-zinc-200 dark:bg-zinc-800"></div>
+                <div class="h-3 w-10 rounded bg-zinc-200 dark:bg-zinc-800"></div>
+              </div>
+              <div class="h-5 w-full rounded bg-zinc-200 dark:bg-zinc-800 mb-2"></div>
+              <div class="h-4 w-3/4 rounded bg-zinc-200 dark:bg-zinc-800 mb-1"></div>
+              <div class="h-4 w-1/2 rounded bg-zinc-200 dark:bg-zinc-800"></div>
+            </div>
+          {/each}
+        </div>
+      {:else if sideView === 'digest'}
+        {#if digest}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
@@ -407,15 +519,17 @@
       >
         {#if selectedArticle.summary}
           {@html marked.parse(selectedArticle.summary)}
-        {:else if selectedArticle.content}
-          {@html marked.parse(selectedArticle.content)}
         {:else}
           <p class="text-zinc-500 italic">Nội dung đang được xử lý...</p>
         {/if}
       </div>
     {:else}
       <div class="h-full flex items-center justify-center text-zinc-500">
-        <p>Chọn một bài viết để đọc</p>
+        {#if loading}
+          <Loader2 size={24} class="animate-spin" />
+        {:else}
+          <p>Chọn một bài viết để đọc</p>
+        {/if}
       </div>
     {/if}
   </OverlayScrollbarsComponent>

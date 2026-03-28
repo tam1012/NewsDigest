@@ -28,10 +28,11 @@ app.get('/api/articles', async (c) => {
     const ids = c.req.query('ids');
     const offset = (page - 1) * limit;
 
-    // compact=1 → chỉ trả id, title, url, source_id, published_at (không description/content)
+    // compact=1 → chỉ trả id, title, url, source_id, published_at
+    // default → trả tất cả trừ content (content đã được NULL sau AI xử lý)
     const fields = compact === '1'
         ? 'id, title, url, source_id, published_at'
-        : '*';
+        : 'id, source_id, url, title, summary, description, description_vn, hot_score, tags, published_at, fetched_at';
 
     let where = 'WHERE 1=1';
     const binds: any[] = [];
@@ -198,7 +199,7 @@ app.post('/api/articles/enqueue-scrape', async (c) => {
     const limit = Math.min(body.limit || 50, 200);
     const force = body.force === true;
 
-    const condition = force ? '1=1' : 'content IS NULL';
+    const condition = force ? '1=1' : 'summary IS NULL';
     const { results } = await c.env.DB.prepare(
         `SELECT id, url, title FROM articles WHERE ${condition} ORDER BY fetched_at DESC LIMIT ?`
     ).bind(limit).all<{ id: string; url: string; title: string }>();
@@ -251,6 +252,15 @@ app.post('/api/digest/generate', async (c) => {
  * - delayMs: delay giữa mỗi lần gọi Gemini (default 3000ms)
  */
 app.post('/api/articles/resummarize', async (c) => {
+    // Auth check: if ADMIN_API_KEY is set, require X-Admin-Key header
+    const adminKey = (c.env as any).ADMIN_API_KEY;
+    if (adminKey) {
+        const providedKey = c.req.header('X-Admin-Key');
+        if (providedKey !== adminKey) {
+            return c.json({ error: 'Unauthorized' }, 401);
+        }
+    }
+
     const body = await c.req.json().catch(() => ({}));
     const limit = Math.min(body.limit || 20, 100);
     const delayMs = Math.max(body.delayMs || 3000, 1000);
@@ -276,7 +286,7 @@ app.post('/api/articles/resummarize', async (c) => {
             const aiResult = await summarizeArticle(art.title || '', art.content, c.env);
             if (aiResult) {
                 await c.env.DB.prepare(
-                    'UPDATE articles SET description_vn = ?, summary = ?, hot_score = ?, tags = ? WHERE id = ?'
+                    'UPDATE articles SET description_vn = ?, summary = ?, hot_score = ?, tags = ?, content = NULL WHERE id = ?'
                 ).bind(aiResult.description_vn, aiResult.summary, aiResult.hot_score, JSON.stringify(aiResult.tags), art.id).run();
                 summarized++;
                 summaryResults.push({ id: art.id, title: art.title, success: true });

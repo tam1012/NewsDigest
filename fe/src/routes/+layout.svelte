@@ -1,35 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { prefs } from '$lib/stores/prefs'
-  import { sources } from '$lib/stores/sources'
   import '../app.css'
   import 'overlayscrollbars/overlayscrollbars.css'
   import { useOverlayScrollbars } from 'overlayscrollbars-svelte'
-  import { goto } from '$app/navigation'
-  import { page } from '$app/stores'
   import type { Snippet } from 'svelte'
 
-  let { data, children }: { data: any; children: Snippet } = $props()
+  let { children }: { children: Snippet } = $props()
 
   let mounted = $state(false)
-
-  // Sync sources from load function to store (used by ArticleCard)
-  $effect(() => {
-    if (data.sources) {
-      $sources = data.sources
-    }
-  })
-
-  // Redirect to onboarding if no sources
-  $effect(() => {
-    if (
-      mounted &&
-      data.sources.length === 0 &&
-      $page.url.pathname !== '/onboarding'
-    ) {
-      goto('/onboarding')
-    }
-  })
 
   const [initBodyScrollbars] = useOverlayScrollbars({
     defer: true,

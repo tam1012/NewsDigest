@@ -22,27 +22,46 @@ function extractVideoId(url: string): string | null {
 }
 
 /**
- * Fetch content from the Python micro-service (Render)
+ * Fetch YouTube transcript via RapidAPI youtube-transcript3
  */
-async function fetchFromContentService(
-  env: Env,
-  endpoint: string,
-  body: Record<string, string>
+async function fetchYouTubeTranscript(
+  videoId: string,
+  env: Env
 ): Promise<string> {
-  const res = await fetch(`${env.CONTENT_SERVICE_URL}${endpoint}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-Key': env.CONTENT_SERVICE_KEY,
-    },
-    body: JSON.stringify(body),
-  });
+  const res = await fetch(
+    `https://youtube-transcript3.p.rapidapi.com/api/transcript?videoId=${videoId}`,
+    {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-rapidapi-host': 'youtube-transcript3.p.rapidapi.com',
+        'x-rapidapi-key': env.RAPIDAPI_KEY,
+      },
+      signal: AbortSignal.timeout(30000),
+    }
+  );
 
   if (!res.ok) {
-    throw new Error(`Content service returned ${res.status}: ${await res.text()}`);
+    throw new Error(`RapidAPI transcript returned ${res.status}: ${await res.text()}`);
   }
 
-  return res.text();
+  const data: any = await res.json();
+
+  if (!data.success || !Array.isArray(data.transcript)) {
+    throw new Error(`No transcript available`);
+  }
+
+  // Join all segments into full text, decode HTML entities
+  const fullText = data.transcript
+    .map((s: any) => s.text)
+    .join(' ')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+
+  return fullText.slice(0, MAX_CHARS);
 }
 
 /**
@@ -107,7 +126,7 @@ async function fetchRedditContent(url: string): Promise<string> {
  * cào nội dung từng bài, gọi AI tóm tắt, và cập nhật D1.
  *
  * Routing:
- *   - YouTube URLs → Python service /youtube/transcript
+ *   - YouTube URLs → RapidAPI youtube-transcript3
  *   - Reddit URLs  → Public JSON endpoint (direct fetch)
  *   - Other URLs   → HTMLRewriter (extractArticleContent)
  *
@@ -122,11 +141,6 @@ export async function handleContentQueue(
 ): Promise<void> {
   console.log(`📥 Processing ${batch.messages.length} articles for content scraping...`);
 
-  // Warm up Render service (avoid cold start delay on first real request)
-  if (env.CONTENT_SERVICE_URL) {
-    await fetch(`${env.CONTENT_SERVICE_URL}/health`).catch(() => {});
-  }
-
   for (const message of batch.messages) {
     const { articleId, url, title } = message.body;
 
@@ -134,19 +148,14 @@ export async function handleContentQueue(
       let content = '';
 
       if (url.includes('youtube.com') || url.includes('youtu.be')) {
-        // --- YouTube → Python service ---
+        // --- YouTube → RapidAPI youtube-transcript3 ---
         const videoId = extractVideoId(url);
-        if (videoId && env.CONTENT_SERVICE_URL) {
-          const raw = await fetchFromContentService(env, '/youtube/transcript', {
-            video_id: videoId,
-          });
-          const data = JSON.parse(raw);
-          content = data.transcript || '';
-          if (data.error) {
-            console.log(`⚠️ YouTube transcript warning for ${url}: ${data.error}`);
-          }
+        if (videoId && env.RAPIDAPI_KEY) {
+          content = await fetchYouTubeTranscript(videoId, env);
         } else if (!videoId) {
           console.log(`⚠️ Could not extract video ID from ${url}`);
+        } else {
+          console.log(`⚠️ RAPIDAPI_KEY not configured, skipping YouTube transcript`);
         }
       } else if (url.includes('reddit.com')) {
         // --- Reddit → Public JSON ---
@@ -169,7 +178,7 @@ export async function handleContentQueue(
           const aiResult = await summarizeArticle(title || '', content, env);
           if (aiResult) {
             await env.DB.prepare(
-              "UPDATE articles SET description_vn = ?, summary = ?, hot_score = ?, tags = ? WHERE id = ?"
+              "UPDATE articles SET description_vn = ?, summary = ?, hot_score = ?, tags = ?, content = NULL WHERE id = ?"
             ).bind(aiResult.description_vn, aiResult.summary, aiResult.hot_score, JSON.stringify(aiResult.tags), articleId).run();
             console.log(`🤖 AI: "${title}" → score=${aiResult.hot_score} tags=${aiResult.tags.join(',')}`);
           }

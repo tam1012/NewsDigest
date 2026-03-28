@@ -6,7 +6,7 @@ export interface Article {
   summary: string | null;
   description: string | null;
   description_vn: string | null;
-  content: string | null;
+
   hot_score: number | null;
   tags: string | null;
   published_at: string | null;
