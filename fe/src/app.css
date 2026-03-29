@@ -116,7 +116,7 @@
     border-color: var(--color-border);
   }
   body {
-    background-color: var(--color-background);
+    background-color: var(--color-bg-1);
     color: var(--color-foreground);
   }
 }
