@@ -52,4 +52,8 @@ export interface ArticleInput {
   title: string;
   description?: string;
   published_at?: string;
+  /** Reddit-only: raw upvote score */
+  reddit_score?: number;
+  /** Reddit-only: raw comment count */
+  reddit_comments?: number;
 }

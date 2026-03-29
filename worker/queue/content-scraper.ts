@@ -99,7 +99,7 @@ async function fetchRedditContent(url: string): Promise<string> {
   const comments = data?.[1]?.data?.children || [];
   const topComments = comments
     .filter((c: any) => c.kind === 't1')
-    .slice(0, 15);
+    .slice(0, 25);
 
   if (topComments.length > 0) {
     parts.push('\n---\n[Top Comments]');

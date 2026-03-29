@@ -26,7 +26,7 @@ export async function fetchSource(source: Source, env: Env): Promise<ArticleInpu
 }
 
 async function fetchReddit(source: Source): Promise<ArticleInput[]> {
-  const url = source.url.endsWith('/') ? `${source.url}hot.json?limit=25` : `${source.url}/hot.json?limit=25`;
+  const url = source.url.endsWith('/') ? `${source.url}hot.json?limit=15` : `${source.url}/hot.json?limit=15`;
   const response = await fetch(url, {
     headers: { 'User-Agent': 'NewsDigest/1.0 (news aggregation bot)' }
   });
@@ -54,7 +54,9 @@ async function fetchReddit(source: Source): Promise<ArticleInput[]> {
           : meta,
         // Dùng thời gian fetch (now) thay vì created_utc
         // → bài hot hôm nay sẽ luôn hiện khi lọc theo "hôm nay"
-        published_at: new Date().toISOString()
+        published_at: new Date().toISOString(),
+        reddit_score: d.score,
+        reddit_comments: d.num_comments,
       };
     });
 }

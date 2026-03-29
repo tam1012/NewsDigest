@@ -49,31 +49,71 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
         for (const article of articles) {
           if (!article.title || !article.url) continue;
 
-          const idValue = crypto.randomUUID();
-          const publishedAt = normalizePublishedAt(article.published_at);
-          const description = article.description || null;
-
-          let result;
           if (source.type === 'reddit') {
-            // Reddit: upsert — cập nhật engagement (description) + thời gian khi bài tái xuất hiện
-            result = await env.DB.prepare(
-              `INSERT INTO articles (id, source_id, url, title, description, published_at)
-               VALUES (?, ?, ?, ?, ?, ?)
-               ON CONFLICT(source_id, url) DO UPDATE SET
-                 description = excluded.description,
-                 published_at = excluded.published_at`
-            ).bind(idValue, source.id, article.url, article.title, description, publishedAt).run();
+            // ── Reddit 2-step: check trước, chỉ enqueue bài MỚI hoặc engagement spike ──
+            const { results: existingRows } = await env.DB.prepare(
+              `SELECT id, description FROM articles WHERE source_id = ? AND url = ?`
+            ).bind(source.id, article.url).all();
+
+            const existing = existingRows?.[0] as any;
+            const description = article.description || null;
+            const publishedAt = normalizePublishedAt(article.published_at);
+
+            if (existing) {
+              // Bài đã tồn tại → update engagement stats
+              // Parse old engagement từ description cũ
+              let oldScore = 0;
+              let oldComments = 0;
+              if (existing.description) {
+                const scoreMatch = existing.description.match(/⬆(\d+)/);
+                const commentsMatch = existing.description.match(/💬(\d+)/);
+                if (scoreMatch) oldScore = parseInt(scoreMatch[1]);
+                if (commentsMatch) oldComments = parseInt(commentsMatch[1]);
+              }
+
+              const newScore = article.reddit_score || 0;
+              const newComments = article.reddit_comments || 0;
+              const scoreDelta = newScore - oldScore;
+              const commentsDelta = newComments - oldComments;
+
+              // Luôn update stats mới nhất
+              await env.DB.prepare(
+                `UPDATE articles SET description = ? WHERE id = ?`
+              ).bind(description, existing.id).run();
+
+              // Nếu engagement tăng ≥ 50 (score hoặc comments) → re-summarize + đưa vào ngày mới
+              if (scoreDelta >= 50 || commentsDelta >= 50) {
+                await env.DB.prepare(
+                  `UPDATE articles SET published_at = ?, summary = NULL, description_vn = NULL, hot_score = NULL, tags = NULL WHERE id = ?`
+                ).bind(publishedAt, existing.id).run();
+                newArticles.push({ articleId: existing.id, url: article.url, title: article.title });
+                insertedCount++;
+                console.log(`🔄 Reddit re-enqueue "${article.title}" — score +${scoreDelta}, comments +${commentsDelta}`);
+              }
+            } else {
+              // Bài mới hoàn toàn → insert + enqueue
+              const idValue = crypto.randomUUID();
+              await env.DB.prepare(
+                `INSERT INTO articles (id, source_id, url, title, description, published_at)
+                 VALUES (?, ?, ?, ?, ?, ?)`
+              ).bind(idValue, source.id, article.url, article.title, description, publishedAt).run();
+              insertedCount++;
+              newArticles.push({ articleId: idValue, url: article.url, title: article.title });
+            }
           } else {
             // Non-Reddit: giữ dedup cứng
-            result = await env.DB.prepare(
+            const idValue = crypto.randomUUID();
+            const publishedAt = normalizePublishedAt(article.published_at);
+            const description = article.description || null;
+            const result = await env.DB.prepare(
               `INSERT OR IGNORE INTO articles (id, source_id, url, title, description, published_at)
                VALUES (?, ?, ?, ?, ?, ?)`
             ).bind(idValue, source.id, article.url, article.title, description, publishedAt).run();
-          }
 
-          if (result.meta && result.meta.changes > 0) {
-            insertedCount++;
-            newArticles.push({ articleId: idValue, url: article.url, title: article.title });
+            if (result.meta && result.meta.changes > 0) {
+              insertedCount++;
+              newArticles.push({ articleId: idValue, url: article.url, title: article.title });
+            }
           }
         }
 
