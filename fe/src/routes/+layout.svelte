@@ -38,6 +38,20 @@
     if (mounted && typeof document !== 'undefined') {
       document.documentElement.classList.toggle('dark', $prefs.darkMode)
       localStorage.setItem('darkMode', String($prefs.darkMode))
+
+      // Update theme-color meta for iPhone status bar
+      const themeColor = $prefs.darkMode ? '#222221' : '#f1f1ee'
+      let meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null
+      if (meta) {
+        meta.setAttribute('content', themeColor)
+        // Remove media attr so it applies unconditionally
+        meta.removeAttribute('media')
+      }
+      // Remove second theme-color meta if present
+      const allThemeMeta = document.querySelectorAll('meta[name="theme-color"]')
+      allThemeMeta.forEach((el, i) => {
+        if (i > 0) el.remove()
+      })
     }
   })
 </script>
