@@ -308,8 +308,8 @@
   <title>NewsDigest - {formattedDate}</title>
 </svelte:head>
 
-{#if mobileMode}
-  <!-- ═══════════════ MOBILE LAYOUT ═══════════════ -->
+<!-- ═══════════════ MOBILE LAYOUT ═══════════════ -->
+<div class="contents sm:hidden">
   <div class="mobile-layout" style="background-color: var(--color-bg-1);">
     <!-- Mobile Top Header / Navigator -->
     <nav class="flex justify-between p-4">
@@ -622,8 +622,10 @@
       </div>
     </div>
   {/if}
-{:else}
-  <!-- ═══════════════ DESKTOP LAYOUT ═══════════════ -->
+</div>
+
+<!-- ═══════════════ DESKTOP LAYOUT ═══════════════ -->
+<div class="hidden sm:contents">
   <div class="flex mx-auto max-w-7xl">
     <aside class="h-svh sticky top-0 border-r w-108 flex flex-col">
       <!-- Top Header / Navigator -->
@@ -933,4 +935,4 @@
       {/if}
     </OverlayScrollbarsComponent>
   </div>
-{/if}
+</div>
