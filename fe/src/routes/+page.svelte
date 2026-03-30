@@ -30,7 +30,7 @@
   let articles = $derived(articleCache.articles)
   let digest = $derived(articleCache.digest)
   let loading = $derived(articleCache.loading)
-  let unsummarizedCount = $derived(articleCache.getUnsummarizedCount())
+  let unsummarizedCount = $derived(articleCache.unsummarizedCount)
 
   let resummarizing = $state(false)
   let resummarizeResult: {
@@ -66,6 +66,33 @@
     // Check admin auth from localStorage (shared with /sources page)
     const savedKey = localStorage.getItem('newsdigest_admin_key')
     isAdmin = !!savedKey && savedKey.trim().length > 0
+
+    // PWA resume: detect when app comes back from background
+    function handleVisibilityChange() {
+      if (document.visibilityState !== 'visible') return
+      clockTick = Date.now()
+
+      const now = new Date()
+      const currentTodayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+
+      if (data.currentDate !== currentTodayStr) {
+        // Date has changed (e.g. opened next day) → navigate to today
+        goto('/', { invalidateAll: true })
+      } else {
+        // Same day → just refresh (throttle will prevent spam)
+        articleCache.loadDate(data.currentDate)
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Update clock every minute to detect midnight transitions
+    const tickInterval = setInterval(() => { clockTick = Date.now() }, 60_000)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      clearInterval(tickInterval)
+    }
   })
 
   // Resummarize handler
@@ -82,10 +109,8 @@
           failed: result.failed ?? 0,
           enqueued: result.enqueued ?? 0,
         }
-        // Reload data after a short delay to pick up any instant resummarizations
-        setTimeout(() => articleCache.forceRefresh(data.currentDate), 1500)
-        // Also reload again after queue processing might have completed
-        setTimeout(() => articleCache.forceRefresh(data.currentDate), 10000)
+        // Reload data after queue processing to pick up resummarized articles
+        setTimeout(() => articleCache.forceRefresh(data.currentDate), 5000)
       }
     } catch (e) {
       console.error('Resummarize failed', e)
@@ -94,7 +119,11 @@
     }
   }
 
+  // Reactive clock tick — re-evaluates todayStr periodically (see interval in onMount)
+  let clockTick = $state(Date.now())
+
   let todayStr = $derived.by(() => {
+    void clockTick
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   })

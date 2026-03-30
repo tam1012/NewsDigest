@@ -35,6 +35,7 @@ let _loading = $state(false);      // initial full-page load
 let _refreshing = $state(false);   // background sync for new articles
 let _loadingMore = $state(false);  // background loading remaining batches
 let _currentDate = $state('');
+let _unsummarizedCount = $derived(_articles.filter((a) => !a.summary).length);
 
 /** Get today's date string in YYYY-MM-DD format (local time). */
 function getTodayStr(): string {
@@ -193,6 +194,16 @@ async function loadDate(date: string) {
   _currentDate = date;
   const isToday = date === getTodayStr();
 
+  /**
+   * Check if a past date's cache needs one final refresh.
+   * True if the cache was created on the same day as the article date
+   * (meaning it was cached while still "today" and may be incomplete).
+   */
+  function needsFinalization(date: string, timestamp: number): boolean {
+    const cacheDay = new Date(timestamp).toISOString().slice(0, 10);
+    return cacheDay === date; // cached same day → might be incomplete
+  }
+
   // 1. Check memory cache first
   const memCached = memoryCache.get(date);
   if (memCached) {
@@ -202,9 +213,11 @@ async function loadDate(date: string) {
     // Load digest from cache too
     _digest = digestCache.get(date) ?? loadDigestFromStorage(date);
 
-    // Only refresh for today — past dates are finalized
-    // Throttle: skip if last refresh was less than 5 min ago
+    // Today: refresh with 5-min throttle
+    // Past date with same-day cache: finalize once
     if (isToday && (Date.now() - memCached.timestamp > REFRESH_THROTTLE_MS)) {
+      backgroundRefresh(date, memCached);
+    } else if (!isToday && needsFinalization(date, memCached.timestamp)) {
       backgroundRefresh(date, memCached);
     }
     return;
@@ -222,9 +235,11 @@ async function loadDate(date: string) {
     _digest = cachedDigest;
     digestCache.set(date, cachedDigest);
 
-    // Only refresh for today — past dates are finalized
-    // Throttle: skip if last refresh was less than 5 min ago
+    // Today: refresh with 5-min throttle
+    // Past date with same-day cache: finalize once
     if (isToday && (Date.now() - storageCached.timestamp > REFRESH_THROTTLE_MS)) {
+      backgroundRefresh(date, storageCached);
+    } else if (!isToday && needsFinalization(date, storageCached.timestamp)) {
       backgroundRefresh(date, storageCached);
     }
     return;
@@ -277,7 +292,9 @@ async function loadDate(date: string) {
 }
 
 /**
- * Background load all remaining articles in one request.
+ * Background load all articles (limit=200 covers any day's volume).
+ * Fetches from page 1 with a large limit, deduplicates against existing cache.
+ * Some overlap with the initial batch is expected and handled by deduplication.
  */
 async function backgroundLoadRemaining(
   date: string,
@@ -288,7 +305,6 @@ async function backgroundLoadRemaining(
   try {
     if (_currentDate !== date) return;
 
-    // Fetch all remaining in one go (limit=200 covers any day's volume)
     const result = await fetchArticlesPage(date, 1, 200);
     if (_currentDate !== date) return;
 
@@ -326,15 +342,14 @@ async function backgroundLoadRemaining(
 }
 
 /**
- * Background refresh: fetch 20 latest articles and merge with cache.
- * If new articles are found, they get prepended. If all 20 overlap
- * with cache, we know we're caught up.
+ * Background refresh: fetch latest INITIAL_BATCH articles and merge with cache.
+ * New articles are prepended; if all fetched articles overlap with cache,
+ * we know we're caught up. Also refreshes digest.
  */
 async function backgroundRefresh(date: string, cacheData: CachedDayData) {
   _refreshing = true;
 
   try {
-    // Fetch latest 20 + digest in parallel
     const [articlesResult, digestResult] = await Promise.all([
       fetchArticlesPage(date, 1, INITIAL_BATCH),
       fetchDigest(date),
@@ -382,21 +397,30 @@ async function backgroundRefresh(date: string, cacheData: CachedDayData) {
 }
 
 /**
- * Force refresh: clear cache for date and reload from scratch.
+ * Force refresh: clear cache and reload.
+ * If data is currently displayed, uses backgroundRefresh to avoid skeleton flash.
  */
 async function forceRefresh(date: string) {
   memoryCache.delete(date);
   localStorage.removeItem(CACHE_PREFIX + date);
   localStorage.removeItem(DIGEST_PREFIX + date);
-  await loadDate(date);
+
+  // If currently displaying data for this date, use backgroundRefresh
+  // to keep existing articles visible while fetching fresh data
+  if (_articles.length > 0 && _currentDate === date) {
+    const tempCache: CachedDayData = {
+      articles: [..._articles],
+      total: _articles.length,
+      fullyLoaded: false,
+      timestamp: 0,
+    };
+    await backgroundRefresh(date, tempCache);
+  } else {
+    await loadDate(date);
+  }
 }
 
-/**
- * Get the unsummarized count from current articles.
- */
-function getUnsummarizedCount(): number {
-  return _articles.filter((a) => !a.summary).length;
-}
+
 
 // Run cleanup on module load (only in browser)
 if (typeof window !== 'undefined') {
@@ -412,7 +436,7 @@ export const articleCache = {
   get refreshing() { return _refreshing; },
   get loadingMore() { return _loadingMore; },
   get currentDate() { return _currentDate; },
+  get unsummarizedCount() { return _unsummarizedCount; },
   loadDate,
   forceRefresh,
-  getUnsummarizedCount,
 };
