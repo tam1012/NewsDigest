@@ -24,6 +24,7 @@
   --color-text-secondary: hsl(var(--text-secondary));
   --color-bg-1: hsl(var(--bg-1));
   --color-bg-2: hsl(var(--bg-2));
+  --color-bg-btn: hsl(var(--bg-btn));
 
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));
@@ -62,6 +63,7 @@
   --text-secondary: 51.43 3.139% 43.73%;
   --bg-1: 50 11.11% 93.92%;
   --bg-2: 50 10% 96.86%;
+  --bg-btn: 60 20% 98%;
   --foreground: 222.2 84% 4.9%;
   --muted: 210 40% 96.1%;
   --muted-foreground: 215.4 16.3% 46.9%;
@@ -92,6 +94,7 @@
   --text-secondary: 48 3.33% 59.02%;
   --bg-1: 60 2.22% 13.14%;
   --bg-2: 60 1.89% 16.47%;
+  --bg-btn: 60 2% 19%;
   --muted: 217.2 32.6% 17.5%;
   --muted-foreground: 215 20.2% 65.1%;
   --popover: 222.2 84% 4.9%;
@@ -228,43 +231,10 @@ aside[data-overlayscrollbars] {
   padding: 1.25rem 1rem 2rem;
 }
 
-/* ═══════════════ DRAWER ═══════════════ */
-.drawer-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-}
-
-.drawer-panel {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 50;
-  height: 90svh;
-  display: flex;
-  flex-direction: column;
-  background-color: var(--color-bg-2);
-  border-radius: 1rem 1rem 0 0;
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
-  overflow: hidden;
-}
-
-.drawer-handle-bar {
-  display: flex;
-  justify-content: center;
-  padding: 0.625rem 0 0.25rem;
-  flex-shrink: 0;
-}
-
-.drawer-handle {
-  width: 2rem;
-  height: 0.25rem;
-  border-radius: 9999px;
-  background-color: var(--color-border);
+/* ═══════════════ DRAWER (vaul-svelte) ═══════════════ */
+.mobile-drawer-content {
+  max-height: 90svh !important;
+  background-color: var(--color-bg-2) !important;
 }
 
 .drawer-nav {
@@ -276,7 +246,7 @@ aside[data-overlayscrollbars] {
   border-bottom: 1px solid var(--color-border);
 }
 
-.drawer-content {
+.drawer-body {
   flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;

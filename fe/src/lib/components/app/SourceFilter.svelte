@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { Popover, PopoverContent, PopoverTrigger } from '$lib/components/ui/popover'
+  import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+  } from '$lib/components/ui/popover'
   import { filters } from '$lib/stores/articles'
   import { sources } from '$lib/stores/sources'
   import { Filter, Check, X } from 'lucide-svelte'
@@ -44,7 +48,9 @@
           const lower = t.toLowerCase()
           tagCount.set(lower, (tagCount.get(lower) || 0) + 1)
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
     // Sort by count descending, take top 20
     return [...tagCount.entries()]
@@ -77,27 +83,21 @@
     $filters.tag = ''
     open = false
   }
-
-  // Type badge color helper
-  function getTypeBadge(type: string): string {
-    switch (type) {
-      case 'youtube': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-      case 'reddit': return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-      case 'rss': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-      case 'voz': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-      default: return 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-400'
-    }
-  }
 </script>
 
 <Popover bind:open>
   <PopoverTrigger>
     {#snippet child({ props })}
-      <CusButton {...props} class="{size === 'sm' ? 'size-8' : 'size-10'} {className}">
+      <CusButton
+        {...props}
+        class="{size === 'sm' ? 'size-8' : 'size-10'} {className}"
+      >
         <div class="relative">
           <Filter size={size === 'sm' ? 14 : 16} />
           {#if hasActiveFilter}
-            <span class="absolute -top-1 -right-1 size-2 rounded-full bg-blue-500 dark:bg-blue-400"></span>
+            <span
+              class="absolute -top-1 -right-1 size-2 rounded-full bg-blue-500 dark:bg-blue-400"
+            ></span>
           {/if}
         </div>
       </CusButton>
@@ -106,11 +106,14 @@
   <PopoverContent
     align="end"
     sideOffset={8}
-    class="w-72 p-0 max-h-[70vh] flex flex-col"
+    class="w-72 p-0 max-h-[70vh] flex flex-col rounded-3xl border border-white bg-bg-btn dark:border-white/10  dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)]"
   >
     <!-- Header -->
-    <div class="flex items-center justify-between px-4 pt-3 pb-2">
-      <span class="text-xs font-semibold uppercase tracking-wider text-text-secondary">Bộ lọc</span>
+    <!-- <div class="flex items-center justify-between px-4 pt-3 pb-2">
+      <span
+        class="text-xs font-semibold uppercase tracking-wider text-text-secondary"
+        >Bộ lọc</span
+      >
       {#if hasActiveFilter}
         <button
           class="text-[0.625rem] text-blue-600 dark:text-blue-400 hover:underline cursor-pointer flex items-center gap-1"
@@ -120,33 +123,36 @@
           Xoá bộ lọc
         </button>
       {/if}
-    </div>
+    </div> -->
 
-    <div class="overflow-y-auto px-3 pb-3 flex flex-col gap-3">
+    <div class="overflow-y-auto flex flex-col p-1">
       <!-- Sources Section -->
       {#if availableSources.length > 0}
         <div>
-          <div class="text-[0.625rem] font-medium uppercase tracking-wider text-text-secondary px-1 mb-1.5">
-            Nguồn ({availableSources.length})
-          </div>
           <div class="flex flex-col gap-0.5">
             {#each availableSources as source (source.id)}
               {@const isSelected = $filters.sourceId === source.id}
-              {@const articleCount = articles.filter(a => a.source_id === source.id).length}
+              {@const articleCount = articles.filter(
+                (a) => a.source_id === source.id,
+              ).length}
               <button
-                class="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-left text-sm transition-colors cursor-pointer
+                class="flex items-center gap-2 w-full px-4 py-2 rounded-full text-left text-sm transition-colors cursor-pointer
                   {isSelected
-                    ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300'
-                    : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-text-main'
-                  }"
+                  ? ' bg-black/10 text-text-main dark:bg-white/10 '
+                  : 'hover:bg-black/5 dark:hover:bg-white/5 text-text-main'}"
                 onclick={() => selectSource(source.id)}
               >
-                <span class="flex-1 truncate text-xs">{source.name}</span>
-                <span class="text-[0.6rem] px-1.5 py-0.5 rounded-full {getTypeBadge(source.type)}">{source.type}</span>
-                <span class="text-[0.625rem] text-text-secondary tabular-nums shrink-0">{articleCount}</span>
-                {#if isSelected}
-                  <Check size={12} class="text-blue-600 dark:text-blue-400 shrink-0" />
-                {/if}
+                <span class="flex-1 truncate text-sm">{source.name}</span>
+                <span
+                  class="text-[0.625rem] text-text-secondary tabular-nums shrink-0"
+                  >{articleCount}</span
+                >
+                <!-- {#if isSelected}
+                  <Check
+                    size={12}
+                    class="text-blue-600 dark:text-blue-400 shrink-0"
+                  />
+                {/if} -->
               </button>
             {/each}
           </div>
@@ -154,25 +160,22 @@
       {/if}
 
       <!-- Separator -->
-      {#if availableSources.length > 0 && availableTags.length > 0}
+      <!-- {#if availableSources.length > 0 && availableTags.length > 0}
         <div class="h-px bg-border"></div>
-      {/if}
+      {/if} -->
 
       <!-- Tags Section -->
-      {#if availableTags.length > 0}
+      <!-- {#if availableTags.length > 0}
         <div>
-          <div class="text-[0.625rem] font-medium uppercase tracking-wider text-text-secondary px-1 mb-1.5">
-            Tags
-          </div>
           <div class="flex flex-wrap gap-1.5">
             {#each availableTags as { tag, count } (tag)}
-              {@const isSelected = $filters.tag.toLowerCase() === tag.toLowerCase()}
+              {@const isSelected =
+                $filters.tag.toLowerCase() === tag.toLowerCase()}
               <button
                 class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[0.625rem] font-medium transition-colors cursor-pointer
                   {isSelected
-                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 ring-1 ring-blue-300 dark:ring-blue-700'
-                    : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
-                  }"
+                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 ring-1 ring-blue-300 dark:ring-blue-700'
+                  : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'}"
                 onclick={() => selectTag(tag)}
               >
                 {tag}
@@ -181,7 +184,7 @@
             {/each}
           </div>
         </div>
-      {/if}
+      {/if} -->
 
       <!-- Empty state -->
       {#if availableSources.length === 0 && availableTags.length === 0}

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick, onMount } from 'svelte'
-  import { fly } from 'svelte/transition'
+  import * as Drawer from '$lib/components/ui/drawer/index.js'
   import { browser } from '$app/environment'
   import { goto } from '$app/navigation'
   import { filters } from '$lib/stores/articles'
@@ -90,7 +90,9 @@
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
     // Update clock every minute to detect midnight transitions
-    const tickInterval = setInterval(() => { clockTick = Date.now() }, 60_000)
+    const tickInterval = setInterval(() => {
+      clockTick = Date.now()
+    }, 60_000)
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
@@ -224,10 +226,16 @@
   // State to track scroll preservation
   let lastScrollInfo = $state({ articleId: null as string | null })
 
-  // Effect to scroll to top when selectedArticle changes
+  // automatically select the first article when articles load on desktop
+  let innerWidth = $state(
+    typeof window !== 'undefined' ? window.innerWidth : 1024,
+  )
+  let mobileMode = $derived(innerWidth < 640)
+
+  // Effect to scroll to top when selectedArticle changes (desktop only)
   $effect(() => {
     const article = selectedArticle
-    if (article) {
+    if (article && !mobileMode) {
       tick().then(() => {
         const shouldScroll = article.id !== lastScrollInfo.articleId
         if (shouldScroll) {
@@ -243,12 +251,6 @@
       })
     }
   })
-
-  // automatically select the first article when articles load on desktop
-  let innerWidth = $state(
-    typeof window !== 'undefined' ? window.innerWidth : 1024,
-  )
-  let mobileMode = $derived(innerWidth < 640)
 
   let currentDatasetId = $state('')
 
@@ -267,14 +269,16 @@
         sideView = 'list'
         selectedArticle = null
       }
-      // Reset scroll for both aside (VP1) and main (VP0) when date changes
-      tick().then(() => {
-        const viewports = document.querySelectorAll(
-          '[data-overlayscrollbars-viewport]',
-        )
-        viewports[0]?.scrollTo({ top: 0, behavior: 'instant' })
-        viewports[1]?.scrollTo({ top: 0, behavior: 'instant' })
-      })
+      // Reset scroll for both aside (VP1) and main (VP0) when date changes (desktop only)
+      if (!mobileMode) {
+        tick().then(() => {
+          const viewports = document.querySelectorAll(
+            '[data-overlayscrollbars-viewport]',
+          )
+          viewports[0]?.scrollTo({ top: 0, behavior: 'instant' })
+          viewports[1]?.scrollTo({ top: 0, behavior: 'instant' })
+        })
+      }
     }
   })
 
@@ -356,7 +360,8 @@
         </CusButton>
         <CusButton class="h-10 w-24 text-sm">{formattedDate}</CusButton>
         <CusButton
-          onclick={() => isToday ? articleCache.forceRefresh(data.currentDate) : goToDate(1)}
+          onclick={() =>
+            isToday ? articleCache.forceRefresh(data.currentDate) : goToDate(1)}
           class="size-10"
           disabled={isToday && (articleCache.refreshing || refreshCooldown)}
         >
@@ -364,16 +369,37 @@
             {#if isToday}
               <div
                 class="col-start-1 row-start-1"
-                in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
-                out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+                in:slideScaleFade={{
+                  duration: 250,
+                  startScale: 0.5,
+                  startOpacity: 0,
+                }}
+                out:slideScaleFade={{
+                  duration: 200,
+                  startScale: 0.5,
+                  startOpacity: 0,
+                }}
               >
-                <RefreshCw size={16} class={articleCache.refreshing || articleCache.loadingMore ? 'animate-spin' : ''} />
+                <RefreshCw
+                  size={16}
+                  class={articleCache.refreshing || articleCache.loadingMore
+                    ? 'animate-spin'
+                    : ''}
+                />
               </div>
             {:else}
               <div
                 class="col-start-1 row-start-1"
-                in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
-                out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+                in:slideScaleFade={{
+                  duration: 250,
+                  startScale: 0.5,
+                  startOpacity: 0,
+                }}
+                out:slideScaleFade={{
+                  duration: 200,
+                  startScale: 0.5,
+                  startOpacity: 0,
+                }}
               >
                 <ChevronRight class="translate-x-px" size={20} />
               </div>
@@ -482,13 +508,19 @@
 
     <!-- Active filter bar (mobile) -->
     {#if hasActiveFilter}
-      <div class="flex items-center gap-2 px-4 py-2 bg-blue-50/60 dark:bg-blue-900/10 border-b border-blue-200/40 dark:border-blue-800/30">
-        <Filter size={12} class="text-blue-600 dark:text-blue-400 shrink-0" />
-        <span class="text-xs text-blue-700 dark:text-blue-300 truncate flex-1">{activeFilterLabel}</span>
-        <span class="text-xs text-text-secondary tabular-nums shrink-0">{filteredArticles.length} bài</span>
-        <button onclick={clearFilters} class="text-blue-600 dark:text-blue-400 cursor-pointer shrink-0">
-          <X size={14} />
-        </button>
+      <div class="flex text-lg items-center gap-2 px-4 py-2">
+        <span class="text-text-main font-bold truncate"
+          >{activeFilterLabel}</span
+        >
+        <span class=" ml-2 text-text-secondary tabular-nums shrink-0"
+          >{filteredArticles.length}</span
+        >
+        <CusButton
+          onclick={clearFilters}
+          class="ml-auto size-10 sm:size-8  shrink-0"
+        >
+          <X size={20} />
+        </CusButton>
       </div>
     {/if}
 
@@ -585,51 +617,40 @@
     </div>
   </div>
 
-  <!-- ═══════════════ MOBILE DRAWER ═══════════════ -->
-  {#if drawerOpen && selectedArticle}
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-      class="drawer-backdrop"
-      onclick={() => (drawerOpen = false)}
-      transition:fly={{ duration: 200 }}
-    ></div>
-    <div class="drawer-panel" transition:fly={{ y: 600, duration: 300 }}>
-      <!-- Drag handle -->
-      <div class="drawer-handle-bar">
-        <div class="drawer-handle"></div>
-      </div>
-      <!-- Drawer navigation -->
-      <div class="drawer-nav">
-        <div class="flex gap-1">
-          <CusButton
-            onclick={() => {
-              goToPrevArticle()
-            }}
-            disabled={!selectedArticle ||
-              filteredArticles.findIndex((a) => a.id === selectedArticle?.id) <=
-                0}
-            class="size-8"
-          >
-            <ChevronLeft class="-translate-x-px" size={20} />
-          </CusButton>
-          <CusButton class="h-8 px-3 text-xs">
-            {filteredArticles.findIndex((a) => a.id === selectedArticle?.id) +
-              1} / {filteredArticles.length}
-          </CusButton>
-          <CusButton
-            onclick={() => {
-              goToNextArticle()
-            }}
-            disabled={!selectedArticle ||
-              filteredArticles.findIndex((a) => a.id === selectedArticle?.id) >=
-                filteredArticles.length - 1}
-            class="size-8"
-          >
-            <ChevronRight class="translate-x-px" size={20} />
-          </CusButton>
-        </div>
-        <div class="flex gap-1">
+  <!-- ═══════════════ MOBILE DRAWER (vaul-svelte) ═══════════════ -->
+  <Drawer.Root bind:open={drawerOpen}>
+    <Drawer.Content class="mobile-drawer-content">
+      {#if selectedArticle}
+        <!-- Drawer navigation -->
+        <div class="drawer-nav">
+          <div class="flex gap-1">
+            <CusButton
+              onclick={() => {
+                goToPrevArticle()
+              }}
+              disabled={!selectedArticle ||
+                filteredArticles.findIndex((a) => a.id === selectedArticle?.id) <=
+                  0}
+              class="size-8"
+            >
+              <ChevronLeft class="-translate-x-px" size={20} />
+            </CusButton>
+            <CusButton class="h-8 px-3 text-xs">
+              {filteredArticles.findIndex((a) => a.id === selectedArticle?.id) +
+                1} / {filteredArticles.length}
+            </CusButton>
+            <CusButton
+              onclick={() => {
+                goToNextArticle()
+              }}
+              disabled={!selectedArticle ||
+                filteredArticles.findIndex((a) => a.id === selectedArticle?.id) >=
+                  filteredArticles.length - 1}
+              class="size-8"
+            >
+              <ChevronRight class="translate-x-px" size={20} />
+            </CusButton>
+          </div>
           <CusButton
             href={selectedArticle.url}
             target="_blank"
@@ -638,40 +659,27 @@
           >
             <ExternalLink size={16} />
           </CusButton>
-          <!-- svelte-ignore a11y_consider_explicit_label -->
-          <CusButton onclick={() => (drawerOpen = false)} class="size-8">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              class="size-4"
-            >
-              <path
-                d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z"
-              />
-            </svg>
-          </CusButton>
         </div>
-      </div>
-      <!-- Drawer content -->
-      <div class="drawer-content">
-        <h1
-          class="font-serif text-xl font-bold leading-[1.2] text-text-main mb-6"
-        >
-          {@html selectedArticle.title}
-        </h1>
-        <div
-          class="prose prose-sm text-text-main-2 prose-headings:text-text-main! prose-p:text-text-main-2! prose-li:text-text-main-2! prose-a:text-text-main-2! prose-strong:text-text-main-2! prose-blockquote:text-text-main-2! dark:prose-invert max-w-none prose-headings:mt-6 prose-h2:text-lg prose-h3:text-base prose-headings:mb-3 prose-p:leading-relaxed prose-li:leading-relaxed"
-        >
-          {#if selectedArticle.summary}
-            {@html marked.parse(selectedArticle.summary)}
-          {:else}
-            <p class="text-zinc-500 italic">Nội dung đang được xử lý...</p>
-          {/if}
+        <!-- Drawer scrollable content -->
+        <div class="drawer-body">
+          <h1
+            class="font-serif text-xl font-bold leading-[1.2] text-text-main mb-6"
+          >
+            {@html selectedArticle.title}
+          </h1>
+          <div
+            class="prose prose-sm text-text-main-2 prose-headings:text-text-main! prose-p:text-text-main-2! prose-li:text-text-main-2! prose-a:text-text-main-2! prose-strong:text-text-main-2! prose-blockquote:text-text-main-2! dark:prose-invert max-w-none prose-headings:mt-6 prose-h2:text-lg prose-h3:text-base prose-headings:mb-3 prose-p:leading-relaxed prose-li:leading-relaxed"
+          >
+            {#if selectedArticle.summary}
+              {@html marked.parse(selectedArticle.summary)}
+            {:else}
+              <p class="text-zinc-500 italic">Nội dung đang được xử lý...</p>
+            {/if}
+          </div>
         </div>
-      </div>
-    </div>
-  {/if}
+      {/if}
+    </Drawer.Content>
+  </Drawer.Root>
 </div>
 
 <!-- ═══════════════ DESKTOP LAYOUT ═══════════════ -->
@@ -688,7 +696,10 @@
           </CusButton>
           <CusButton class="h-8 w-24 text-sm">{formattedDate}</CusButton>
           <CusButton
-            onclick={() => isToday ? articleCache.forceRefresh(data.currentDate) : goToDate(1)}
+            onclick={() =>
+              isToday
+                ? articleCache.forceRefresh(data.currentDate)
+                : goToDate(1)}
             class="size-8"
             disabled={isToday && (articleCache.refreshing || refreshCooldown)}
           >
@@ -696,16 +707,37 @@
               {#if isToday}
                 <div
                   class="col-start-1 row-start-1"
-                  in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
-                  out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+                  in:slideScaleFade={{
+                    duration: 250,
+                    startScale: 0.5,
+                    startOpacity: 0,
+                  }}
+                  out:slideScaleFade={{
+                    duration: 200,
+                    startScale: 0.5,
+                    startOpacity: 0,
+                  }}
                 >
-                  <RefreshCw size={14} class={articleCache.refreshing || articleCache.loadingMore ? 'animate-spin' : ''} />
+                  <RefreshCw
+                    size={14}
+                    class={articleCache.refreshing || articleCache.loadingMore
+                      ? 'animate-spin'
+                      : ''}
+                  />
                 </div>
               {:else}
                 <div
                   class="col-start-1 row-start-1"
-                  in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
-                  out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+                  in:slideScaleFade={{
+                    duration: 250,
+                    startScale: 0.5,
+                    startOpacity: 0,
+                  }}
+                  out:slideScaleFade={{
+                    duration: 200,
+                    startScale: 0.5,
+                    startOpacity: 0,
+                  }}
                 >
                   <ChevronRight class="translate-x-px" size={20} />
                 </div>
@@ -820,13 +852,16 @@
       >
         <!-- Active filter bar (desktop) -->
         {#if hasActiveFilter}
-          <div class="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-blue-50/60 dark:bg-blue-900/10 border border-blue-200/40 dark:border-blue-800/30">
-            <Filter size={12} class="text-blue-600 dark:text-blue-400 shrink-0" />
-            <span class="text-xs text-blue-700 dark:text-blue-300 truncate flex-1">{activeFilterLabel}</span>
-            <span class="text-xs text-text-secondary tabular-nums shrink-0">{filteredArticles.length}</span>
-            <button onclick={clearFilters} class="text-blue-600 dark:text-blue-400 cursor-pointer shrink-0 hover:text-blue-800 dark:hover:text-blue-200 transition-colors">
-              <X size={14} />
-            </button>
+          <div class="flex items-center gap-2 mb-8">
+            <span class="text-sm text-text-main font-bold truncate"
+              >{activeFilterLabel}</span
+            >
+            <span class="text-xs ml-2 text-text-secondary tabular-nums shrink-0"
+              >{filteredArticles.length}</span
+            >
+            <CusButton onclick={clearFilters} class="size-8 ml-auto shrink-0">
+              <X size={16} />
+            </CusButton>
           </div>
         {/if}
         {#if loading}
