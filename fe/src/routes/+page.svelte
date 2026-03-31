@@ -1,6 +1,5 @@
 <script lang="ts">
   import { tick, onMount } from 'svelte'
-  import * as Drawer from '$lib/components/ui/drawer/index.js'
   import { browser } from '$app/environment'
   import { goto } from '$app/navigation'
   import { filters } from '$lib/stores/articles'
@@ -9,7 +8,6 @@
     ChevronLeft,
     ChevronRight,
     ExternalLink,
-    Filter,
     Loader2,
     Moon,
     RefreshCw,
@@ -17,7 +15,7 @@
     Sun,
     X,
   } from 'lucide-svelte'
-  import type { Article, Digest } from '$lib/types'
+  import type { Article } from '$lib/types'
   import { sources } from '$lib/stores/sources'
   import { api } from '$lib/api'
   import { marked } from 'marked'
@@ -26,6 +24,7 @@
   import CusButton from '$lib/components/ui/CusButton.svelte'
   import { articleCache } from '$lib/stores/articleCache.svelte'
   import SourceFilter from '$lib/components/app/SourceFilter.svelte'
+  import MobileArticleSheet from '$lib/components/app/MobileArticleSheet.svelte'
 
   let { data } = $props()
 
@@ -304,6 +303,11 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && drawerOpen) {
+      e.preventDefault()
+      drawerOpen = false
+      return
+    }
     const tag = (e.target as HTMLElement)?.tagName
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
     if (e.key === 'ArrowLeft') {
@@ -341,6 +345,12 @@
     const article = articles.find((a) => a.id === articleId)
     if (article) selectArticle(article)
   }
+
+  $effect(() => {
+    if (!mobileMode && drawerOpen) {
+      drawerOpen = false
+    }
+  })
 </script>
 
 <svelte:window bind:innerWidth onkeydown={handleKeydown} />
@@ -617,69 +627,16 @@
     </div>
   </div>
 
-  <!-- ═══════════════ MOBILE DRAWER (vaul-svelte) ═══════════════ -->
-  <Drawer.Root bind:open={drawerOpen}>
-    <Drawer.Content class="mobile-drawer-content">
-      {#if selectedArticle}
-        <!-- Drawer navigation -->
-        <div class="drawer-nav">
-          <div class="flex gap-1">
-            <CusButton
-              onclick={() => {
-                goToPrevArticle()
-              }}
-              disabled={!selectedArticle ||
-                filteredArticles.findIndex((a) => a.id === selectedArticle?.id) <=
-                  0}
-              class="size-8"
-            >
-              <ChevronLeft class="-translate-x-px" size={20} />
-            </CusButton>
-            <CusButton class="h-8 px-3 text-xs">
-              {filteredArticles.findIndex((a) => a.id === selectedArticle?.id) +
-                1} / {filteredArticles.length}
-            </CusButton>
-            <CusButton
-              onclick={() => {
-                goToNextArticle()
-              }}
-              disabled={!selectedArticle ||
-                filteredArticles.findIndex((a) => a.id === selectedArticle?.id) >=
-                  filteredArticles.length - 1}
-              class="size-8"
-            >
-              <ChevronRight class="translate-x-px" size={20} />
-            </CusButton>
-          </div>
-          <CusButton
-            href={selectedArticle.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="size-8"
-          >
-            <ExternalLink size={16} />
-          </CusButton>
-        </div>
-        <!-- Drawer scrollable content -->
-        <div class="drawer-body">
-          <h1
-            class="font-serif text-xl font-bold leading-[1.2] text-text-main mb-6"
-          >
-            {@html selectedArticle.title}
-          </h1>
-          <div
-            class="prose prose-sm text-text-main-2 prose-headings:text-text-main! prose-p:text-text-main-2! prose-li:text-text-main-2! prose-a:text-text-main-2! prose-strong:text-text-main-2! prose-blockquote:text-text-main-2! dark:prose-invert max-w-none prose-headings:mt-6 prose-h2:text-lg prose-h3:text-base prose-headings:mb-3 prose-p:leading-relaxed prose-li:leading-relaxed"
-          >
-            {#if selectedArticle.summary}
-              {@html marked.parse(selectedArticle.summary)}
-            {:else}
-              <p class="text-zinc-500 italic">Nội dung đang được xử lý...</p>
-            {/if}
-          </div>
-        </div>
-      {/if}
-    </Drawer.Content>
-  </Drawer.Root>
+  <MobileArticleSheet
+    open={drawerOpen}
+    {selectedArticle}
+    {filteredArticles}
+    onPrev={goToPrevArticle}
+    onNext={goToNextArticle}
+    onClose={() => {
+      drawerOpen = false
+    }}
+  />
 </div>
 
 <!-- ═══════════════ DESKTOP LAYOUT ═══════════════ -->

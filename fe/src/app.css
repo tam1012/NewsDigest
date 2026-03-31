@@ -231,10 +231,12 @@ aside[data-overlayscrollbars] {
   padding: 1.25rem 1rem 2rem;
 }
 
-/* ═══════════════ DRAWER (vaul-svelte) ═══════════════ */
-.mobile-drawer-content {
-  max-height: 90svh !important;
-  background-color: var(--color-bg-2) !important;
+/* ═══════════════ MOBILE SHEET (custom) ═══════════════ */
+#news-mobile-sheet-panel,
+#news-mobile-sheet-backdrop {
+  transition:
+    transform 0.4s cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 0.4s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .drawer-nav {
@@ -252,4 +254,8 @@ aside[data-overlayscrollbars] {
   -webkit-overflow-scrolling: touch;
   padding: 1.25rem 1rem 3rem;
   overscroll-behavior: contain;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
 }
