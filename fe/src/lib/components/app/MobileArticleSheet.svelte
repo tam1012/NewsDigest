@@ -37,6 +37,10 @@
   let bodyStartY = $state(0)
   const touchMoveOptions: AddEventListenerOptions = { passive: false }
   const velocityCloseThreshold = 0.7 // px/ms
+  let originalBodyOverflow = $state<string | null>(null)
+  let originalBodyOverscrollBehavior = $state<string | null>(null)
+  let originalHtmlOverflow = $state<string | null>(null)
+  let originalHtmlOverscrollBehavior = $state<string | null>(null)
 
   let currentIndex = $derived.by(() => {
     if (!selectedArticle) return -1
@@ -73,6 +77,40 @@
   function requestClose() {
     syncCloseStyles()
     onClose?.()
+  }
+
+  function lockPageScroll() {
+    if (typeof document === 'undefined') return
+    const body = document.body
+    const html = document.documentElement
+
+    if (originalBodyOverflow === null) {
+      originalBodyOverflow = body.style.overflow
+      originalBodyOverscrollBehavior = body.style.overscrollBehavior
+      originalHtmlOverflow = html.style.overflow
+      originalHtmlOverscrollBehavior = html.style.overscrollBehavior
+    }
+
+    html.style.overflow = 'hidden'
+    html.style.overscrollBehavior = 'none'
+    body.style.overflow = 'hidden'
+    body.style.overscrollBehavior = 'none'
+  }
+
+  function unlockPageScroll() {
+    if (typeof document === 'undefined') return
+    const body = document.body
+    const html = document.documentElement
+
+    html.style.overflow = originalHtmlOverflow ?? ''
+    html.style.overscrollBehavior = originalHtmlOverscrollBehavior ?? ''
+    body.style.overflow = originalBodyOverflow ?? ''
+    body.style.overscrollBehavior = originalBodyOverscrollBehavior ?? ''
+
+    originalHtmlOverflow = null
+    originalHtmlOverscrollBehavior = null
+    originalBodyOverflow = null
+    originalBodyOverscrollBehavior = null
   }
 
   function getPageY(e: MouseEvent | TouchEvent) {
@@ -200,14 +238,17 @@
   $effect(() => {
     if (open) {
       syncOpenStyles()
+      lockPageScroll()
     } else {
       syncCloseStyles()
+      unlockPageScroll()
     }
   })
 
   $effect(() => {
     return () => {
       removeDragListeners()
+      unlockPageScroll()
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId)
       }
@@ -235,7 +276,7 @@
     role="dialog"
     aria-modal="true"
     aria-label="Chi tiết bài viết"
-    class="fixed inset-x-0 bottom-0 h-[88svh] max-h-[88svh] rounded-t-4xl border border-b-0 border-border bg-bg-2 shadow-2xl pointer-events-none flex flex-col"
+    class="fixed inset-x-0 bottom-0 h-svh rounded-t-4xl border border-b-0 border-border bg-bg-2 shadow-2xl pointer-events-none flex flex-col"
     style="transform: translateY(100%);"
   >
     <div
@@ -278,7 +319,7 @@
       <div
         bind:this={drawerBody}
         role="presentation"
-        class="drawer-body"
+        class="drawer-body custom-scrollbar"
         ontouchstart={onBodyTouchStart}
         ontouchmove={onBodyTouchMove}
         ontouchend={onBodyTouchEnd}

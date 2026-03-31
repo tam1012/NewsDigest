@@ -41,7 +41,9 @@
 
       // Update theme-color meta for iPhone status bar
       const themeColor = $prefs.darkMode ? '#222221' : '#f1f1ee'
-      let meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null
+      let meta = document.querySelector(
+        'meta[name="theme-color"]',
+      ) as HTMLMetaElement | null
       if (meta) {
         meta.setAttribute('content', themeColor)
         // Remove media attr so it applies unconditionally
@@ -58,7 +60,7 @@
 
 <div
   class="min-h-screen"
-  style="background: linear-gradient(to right, var(--color-bg-1) 50%, var(--color-bg-2) 50%);"
+  style="background: linear-gradient(to right, var(--color-bg-1) 65%, var(--color-bg-2) 65%);"
 >
   {@render children()}
 </div>

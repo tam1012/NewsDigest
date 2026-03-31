@@ -131,14 +131,14 @@
       <!-- Sources Section -->
       {#if availableSources.length > 0}
         <div>
-          <div class="flex flex-col gap-0.5">
+          <div class="flex flex-col gap-1">
             {#each availableSources as source (source.id)}
               {@const isSelected = $filters.sourceId === source.id}
               {@const articleCount = articles.filter(
                 (a) => a.source_id === source.id,
               ).length}
               <button
-                class="flex items-center gap-2 w-full px-4 py-2 rounded-full text-left text-sm transition-colors cursor-pointer
+                class="flex items-center gap-2 w-full px-4 py-2.5 rounded-full text-left text-sm transition-colors cursor-pointer
                   {isSelected
                   ? ' bg-black/10 text-text-main dark:bg-white/10 '
                   : 'hover:bg-black/5 dark:hover:bg-white/5 text-text-main'}"

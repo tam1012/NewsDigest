@@ -229,7 +229,7 @@
   let innerWidth = $state(
     typeof window !== 'undefined' ? window.innerWidth : 1024,
   )
-  let mobileMode = $derived(innerWidth < 640)
+  let mobileMode = $derived(innerWidth < 768)
 
   // Effect to scroll to top when selectedArticle changes (desktop only)
   $effect(() => {
@@ -360,7 +360,7 @@
 </svelte:head>
 
 <!-- ═══════════════ MOBILE LAYOUT ═══════════════ -->
-<div class="contents sm:hidden">
+<div class=" md:hidden">
   <div class="mobile-layout" style="background-color: var(--color-bg-1);">
     <!-- Mobile Top Header / Navigator -->
     <nav class="flex justify-between p-4">
@@ -640,8 +640,8 @@
 </div>
 
 <!-- ═══════════════ DESKTOP LAYOUT ═══════════════ -->
-<div class="hidden sm:contents">
-  <div class="flex mx-auto max-w-7xl">
+<div class="hidden md:contents">
+  <div class="flex mx-auto max-w-340 sm:px-6">
     <aside class="h-svh sticky top-0 border-r w-108 flex flex-col">
       <!-- Top Header / Navigator -->
       <nav
@@ -921,7 +921,7 @@
       element="main"
       defer
       options={{ scrollbars: { autoHide: 'leave', autoHideDelay: 300 } }}
-      class="flex-1 py-6 px-16"
+      class="flex-1 py-6 md:px-10 xl:px-16"
       style="background-color: var(--color-bg-2);"
     >
       {#if selectedArticle}
