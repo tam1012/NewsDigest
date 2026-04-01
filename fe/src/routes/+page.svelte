@@ -70,6 +70,11 @@
     isAdmin = !!savedKey && savedKey.trim().length > 0
 
     // PWA resume: detect when app comes back from background
+    // Track what "today" was when the user last saw the page,
+    // so we only auto-navigate if the calendar day actually rolled over
+    // while the user was viewing today (not an intentionally chosen past date).
+    let lastKnownToday = todayStr
+
     function handleVisibilityChange() {
       if (document.visibilityState !== 'visible') return
       clockTick = Date.now()
@@ -77,11 +82,13 @@
       const now = new Date()
       const currentTodayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
-      if (data.currentDate !== currentTodayStr) {
-        // Date has changed (e.g. opened next day) → navigate to today
+      if (currentTodayStr !== lastKnownToday && data.currentDate === lastKnownToday) {
+        // The calendar day rolled over while the user was viewing "today" → navigate to the new today
+        lastKnownToday = currentTodayStr
         goto('/', { invalidateAll: true })
       } else {
-        // Same day → just refresh (throttle will prevent spam)
+        lastKnownToday = currentTodayStr
+        // Same day or user was viewing a past date → just refresh current view
         articleCache.loadDate(data.currentDate)
       }
     }
