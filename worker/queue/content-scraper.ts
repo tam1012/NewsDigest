@@ -122,6 +122,77 @@ async function fetchRedditContent(url: string): Promise<string> {
 }
 
 /**
+ * Fetch README from a GitHub repo.
+ * 1) Thử GitHub API /repos/{owner}/{repo}/readme để lấy download_url chính xác
+ *    (README có thể nằm ở docs/, .github/, etc.)
+ * 2) Fallback: thử raw URL các vị trí phổ biến
+ */
+async function fetchGitHubReadme(repoUrl: string): Promise<string> {
+  const match = repoUrl.match(/github\.com\/([^/]+\/[^/]+)/);
+  if (!match) return '';
+
+  const ownerRepo = match[1];
+
+  // 1) GitHub API — trả về download_url chính xác cho README
+  try {
+    const apiRes = await fetch(`https://api.github.com/repos/${ownerRepo}/readme`, {
+      headers: {
+        'User-Agent': 'NewsDigest/1.0',
+        'Accept': 'application/vnd.github.v3+json',
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (apiRes.ok) {
+      const data: any = await apiRes.json();
+      const downloadUrl = data?.download_url;
+      if (downloadUrl) {
+        const readmeRes = await fetch(downloadUrl, {
+          headers: { 'User-Agent': 'NewsDigest/1.0' },
+          signal: AbortSignal.timeout(10000),
+        });
+        if (readmeRes.ok) {
+          const text = await readmeRes.text();
+          if (text.length > 50) {
+            console.log(`[github] Fetched README for ${ownerRepo} via API (${text.length} chars, path: ${data.path})`);
+            return text.slice(0, MAX_CHARS);
+          }
+        }
+      }
+    }
+  } catch (err: any) {
+    console.log(`[github] API fallback for ${ownerRepo}: ${err.message}`);
+  }
+
+  // 2) Fallback — thử raw URL trực tiếp
+  const candidates = [
+    `https://raw.githubusercontent.com/${ownerRepo}/main/README.md`,
+    `https://raw.githubusercontent.com/${ownerRepo}/master/README.md`,
+    `https://raw.githubusercontent.com/${ownerRepo}/HEAD/README.md`,
+  ];
+
+  for (const rawUrl of candidates) {
+    try {
+      const res = await fetch(rawUrl, {
+        headers: { 'User-Agent': 'NewsDigest/1.0' },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.ok) {
+        const text = await res.text();
+        if (text.length > 50) {
+          console.log(`[github] Fetched README for ${ownerRepo} via raw (${text.length} chars)`);
+          return text.slice(0, MAX_CHARS);
+        }
+      }
+    } catch {
+      // Try next candidate
+    }
+  }
+
+  console.log(`[github] No README found for ${ownerRepo}`);
+  return '';
+}
+
+/**
  * Queue Consumer — Nhận batch messages chứa article URLs,
  * cào nội dung từng bài, gọi AI tóm tắt, và cập nhật D1.
  *
@@ -171,6 +242,9 @@ export async function handleContentQueue(
         // --- Reddit → Public JSON ---
         await new Promise(r => setTimeout(r, 2000));
         content = await fetchRedditContent(url);
+      } else if (url.match(/^https?:\/\/github\.com\/[^/]+\/[^/]+$/)) {
+        // --- GitHub Repo → Fetch README.md ---
+        content = await fetchGitHubReadme(url);
       } else {
         // --- Other sites → HTMLRewriter ---
         content = await extractArticleContent(url);

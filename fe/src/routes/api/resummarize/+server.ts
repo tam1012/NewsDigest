@@ -4,8 +4,12 @@ import type { RequestHandler } from './$types';
 export const POST: RequestHandler = async ({ platform }) => {
   // Cloudflare Pages env via platform.env
   const env = (platform as any)?.env ?? {};
-  const apiUrl = env.API_URL || 'https://newsdigest.trongnguyenchromeos.workers.dev';
+  const apiUrl = env.API_URL || '';
   const adminKey = env.ADMIN_API_KEY || '';
+
+  if (!apiUrl) {
+    return json({ ok: false, error: 'API_URL not configured in Pages secrets' }, { status: 500 });
+  }
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

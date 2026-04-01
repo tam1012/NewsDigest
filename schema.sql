@@ -1,5 +1,5 @@
 -- Nguồn tin do user thêm vào
-CREATE TABLE sources (
+CREATE TABLE IF NOT EXISTS sources (
   id          TEXT PRIMARY KEY,         -- UUID
   url         TEXT NOT NULL UNIQUE,
   name        TEXT NOT NULL,
@@ -11,7 +11,7 @@ CREATE TABLE sources (
 );
 
 -- Cấu hình scraper đã học (cache selector theo domain)
-CREATE TABLE scraper_configs (
+CREATE TABLE IF NOT EXISTS scraper_configs (
   domain      TEXT PRIMARY KEY,
   mode        TEXT NOT NULL,            -- 'rss' | 'html' | 'gemini'
   config_json TEXT NOT NULL,            -- JSON: { rssUrl?, selectors? }
@@ -19,7 +19,7 @@ CREATE TABLE scraper_configs (
 );
 
 -- Bài viết đã thu thập
-CREATE TABLE articles (
+CREATE TABLE IF NOT EXISTS articles (
   id          TEXT PRIMARY KEY,         -- UUID
   source_id   TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
   url         TEXT NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE articles (
 );
 
 -- Digest tổng hợp theo ngày (mỗi ngày 1 digest, cập nhật liên tục)
-CREATE TABLE digests (
+CREATE TABLE IF NOT EXISTS digests (
   id          TEXT PRIMARY KEY,
   digest_date TEXT NOT NULL UNIQUE,     -- YYYY-MM-DD, mỗi ngày 1 digest
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
@@ -45,10 +45,10 @@ CREATE TABLE digests (
   total_fetched INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE INDEX idx_digests_date ON digests(digest_date);
+CREATE INDEX IF NOT EXISTS idx_digests_date ON digests(digest_date);
 
 -- Index để query nhanh
-CREATE INDEX idx_articles_source    ON articles(source_id);
-CREATE INDEX idx_articles_hot       ON articles(hot_score DESC);
-CREATE INDEX idx_articles_fetched   ON articles(fetched_at DESC);
-CREATE INDEX idx_articles_published ON articles(published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_articles_source    ON articles(source_id);
+CREATE INDEX IF NOT EXISTS idx_articles_hot       ON articles(hot_score DESC);
+CREATE INDEX IF NOT EXISTS idx_articles_fetched   ON articles(fetched_at DESC);
+CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at DESC);

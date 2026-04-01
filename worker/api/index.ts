@@ -527,22 +527,5 @@ app.post('/api/sources/fetch-all', async (c) => {
     return c.json({ ok: true, total_fetched: totalFetched, total_inserted: totalInserted, results: fetchResults });
 });
 
-// ── Push ─────────────────────────────────────────────────
-
-app.get('/api/push/vapid-public-key', (c) => {
-    return c.json({ publicKey: c.env.VAPID_PUBLIC_KEY });
-});
-
-app.post('/api/push/subscribe', async (c) => {
-    const sub = await c.req.json();
-    const hash = crypto.randomUUID();
-    await c.env.PUSH_SUBSCRIPTIONS.put(`sub:${hash}`, JSON.stringify(sub));
-    return c.json({ ok: true });
-});
-
-app.delete('/api/push/unsubscribe', async (c) => {
-    return c.json({ ok: true });
-});
-
 
 export default app;

@@ -10,20 +10,34 @@ function normalizePublishedAt(raw?: string | null): string {
 
 const BATCH_SIZE = 3; // Fetch 3 sources song song
 
-/**
- * Cron Worker — Fetch TẤT CẢ enabled sources mỗi lần chạy.
- * Chạy song song theo batch để tránh quá tải.
- * Sau khi insert, enqueue article URLs mới vào CONTENT_QUEUE để cào nội dung.
- */
-export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: ExecutionContext) {
-  console.log(`Cron triggered at ${new Date().toISOString()}`);
+// Cron Worker — Fetch enabled sources mỗi lần chạy.
+// Chạy song song theo batch để tránh quá tải.
+// Sau khi insert, enqueue article URLs mới vào CONTENT_QUEUE để cào nội dung.
+//
+// triggerCron: cron pattern đã trigger (dùng để phân biệt cron nào chạy)
+// - "0 */3 * * *" → scrape tất cả NGOẠI TRỪ github-trending
+// - "0 1 * * *"   → chỉ scrape github-trending
+export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: ExecutionContext, triggerCron?: string) {
+  const isGitHubTrendingCron = triggerCron === '0 1 * * *';
+  const cronLabel = isGitHubTrendingCron ? 'GitHub Trending (daily)' : 'General (every 3h)';
+  console.log(`Cron [${cronLabel}] triggered at ${new Date().toISOString()}`);
 
-  const { results: sources } = await env.DB.prepare(
+  const { results: allSources } = await env.DB.prepare(
     "SELECT * FROM sources WHERE enabled = 1 ORDER BY created_at"
   ).all<Source>();
 
-  if (!sources || sources.length === 0) {
+  if (!allSources || allSources.length === 0) {
     console.log("No enabled sources found.");
+    return;
+  }
+
+  // Lọc sources theo loại cron
+  const sources = isGitHubTrendingCron
+    ? allSources.filter(s => s.type === 'github-trending')
+    : allSources.filter(s => s.type !== 'github-trending');
+
+  if (sources.length === 0) {
+    console.log(`No matching sources for cron [${cronLabel}].`);
     return;
   }
 

@@ -6,10 +6,9 @@
   "scripts": {
     "dev": "wrangler dev",
     "dev:fe": "cd fe && npm run dev",
-    "deploy": "npm run deploy:all",
-    "deploy:worker": "wrangler deploy",
-    "deploy:fe": "cd fe && npm run build && set -a && source ../.env && set +a && npx wrangler pages deploy build --project-name=newsdigest-fe --commit-dirty=true",
-    "deploy:all": "npm run deploy:worker && npm run deploy:fe"
+    "cf:init": "node scripts/cf-init.mjs",
+    "deploy": "node scripts/deploy.mjs",
+    "deploy:worker": "wrangler deploy"
   },
   "dependencies": {
     "fast-xml-parser": "^4.3.6",
@@ -18,6 +17,6 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240208.0",
     "typescript": "^5.3.3",
-    "wrangler": "^3.30.0"
+    "wrangler": "^4.79.0"
   }
 }
