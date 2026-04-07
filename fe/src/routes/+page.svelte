@@ -608,7 +608,7 @@
               onclick={() => selectArticle(article)}
             >
               <div
-                class="flex items-center text-[0.65em] text-text-secondary uppercase tracking-wider mb-2"
+                class="flex items-center text-[0.675em] text-text-secondary uppercase tracking-wider mb-2"
               >
                 <span class="truncate pr-4"
                   >{getSourceName(article.source_id)}</span
@@ -902,7 +902,7 @@
                 onclick={() => selectArticle(article)}
               >
                 <div
-                  class="flex items-center text-[0.625em] text-text-secondary uppercase tracking-wider mb-2"
+                  class="flex items-center text-[0.675em] text-text-secondary uppercase tracking-wider mb-2"
                 >
                   <span class="truncate pr-4"
                     >{getSourceName(article.source_id)}</span
@@ -917,12 +917,12 @@
                   </span>
                 </div>
                 <h3
-                  class="font-serif text-[1em] leading-[1.4] mb-2 font-semibold text-text-main group-hover:underline underline-offset-4 transition-all"
+                  class="font-serif text-[1.125em] leading-[1.4] mb-2 font-semibold text-text-main group-hover:underline underline-offset-4 transition-all"
                 >
                   {@html article.title}
                 </h3>
                 <p
-                  class="text-[0.875em] text-text-secondary leading-relaxed line-clamp-10 wrap-break-word"
+                  class="text-[1em] text-text-secondary leading-relaxed line-clamp-10 wrap-break-word"
                 >
                   {article.description_vn ||
                     article.description ||
