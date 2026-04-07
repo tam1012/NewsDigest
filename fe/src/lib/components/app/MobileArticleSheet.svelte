@@ -328,7 +328,7 @@
           class="hover:underline flex justify-center underline-offset-4"
         >
           <h1
-            class="font-serif text-[1.25em] text-center font-bold leading-[1.2] text-text-main mb-10 inline"
+            class="font-serif text-[1.25em] text-center font-bold leading-[1.2] text-text-main mb-4 inline"
           >
             {@html selectedArticle.title}
           </h1>
