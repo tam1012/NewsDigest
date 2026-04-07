@@ -241,7 +241,7 @@ aside[data-overlayscrollbars] {
   flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 1.25rem 1rem 6rem;
+  padding: 1.25rem 1rem 8rem;
   overscroll-behavior: contain;
 }
 

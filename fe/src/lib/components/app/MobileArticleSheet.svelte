@@ -1,12 +1,6 @@
 <script lang="ts">
   import { marked } from 'marked'
-  import {
-    ChevronLeft,
-    ChevronRight,
-    Clock,
-    Link2,
-    X,
-  } from 'lucide-svelte'
+  import { ChevronLeft, ChevronRight, Clock, Link2, X } from 'lucide-svelte'
   import type { Article } from '$lib/types'
   import CusButton from '$lib/components/ui/CusButton.svelte'
 
@@ -295,25 +289,6 @@
     </div>
 
     {#if selectedArticle}
-      <div class="drawer-nav">
-        <div class="flex gap-1">
-          <CusButton onclick={onPrev} disabled={!canGoPrev} class="size-8">
-            <ChevronLeft class="-translate-x-px" size={20} />
-          </CusButton>
-          <CusButton class="h-8 px-3 text-xs">
-            {currentIndex + 1} / {filteredArticles.length}
-          </CusButton>
-          <CusButton onclick={onNext} disabled={!canGoNext} class="size-8">
-            <ChevronRight class="translate-x-px" size={20} />
-          </CusButton>
-        </div>
-        <div class="flex gap-1">
-          <CusButton onclick={requestClose} class="size-8">
-            <X size={16} />
-          </CusButton>
-        </div>
-      </div>
-
       <div
         bind:this={drawerBody}
         role="presentation"
@@ -353,7 +328,7 @@
           class="hover:underline flex justify-center underline-offset-4"
         >
           <h1
-            class="font-serif text-[1.25em] font-bold leading-[1.2] text-text-main mb-6 inline"
+            class="font-serif text-[1.25em] text-center font-bold leading-[1.2] text-text-main mb-10 inline"
           >
             {@html selectedArticle.title}
           </h1>
@@ -367,6 +342,27 @@
             <p class="text-zinc-500 italic">Nội dung đang được xử lý...</p>
           {/if}
         </div>
+      </div>
+
+      <div
+        class="fixed bottom-0 left-0 right-0 py-6 px-4 bg-linear-to-t from-10% from-bg-2 to-bg-2/0"
+      >
+        <div class="flex gap-3">
+          <CusButton onclick={onPrev} disabled={!canGoPrev} class="h-10 flex-1">
+            <ChevronLeft class="-translate-x-px" size={20} />
+          </CusButton>
+          <CusButton onclick={requestClose} class="h-10 flex-1 px-3 text-xs">
+            {currentIndex + 1} / {filteredArticles.length}
+          </CusButton>
+          <CusButton onclick={onNext} disabled={!canGoNext} class="h-10 flex-1">
+            <ChevronRight class="translate-x-px" size={20} />
+          </CusButton>
+        </div>
+        <!-- <div class="flex gap-1">
+          <CusButton onclick={requestClose} class="size-8">
+            <X size={16} />
+          </CusButton>
+        </div> -->
       </div>
     {/if}
   </div>
