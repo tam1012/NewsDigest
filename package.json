@@ -8,6 +8,7 @@
     "dev:fe": "cd fe && npm run dev",
     "cf:init": "node scripts/cf-init.mjs",
     "deploy": "node scripts/deploy.mjs",
+    "deploy:fe": "node scripts/deploy-fe.mjs",
     "deploy:worker": "wrangler deploy"
   },
   "dependencies": {
