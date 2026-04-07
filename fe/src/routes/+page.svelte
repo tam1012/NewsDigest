@@ -599,7 +599,7 @@
           </div>
         {/if}
       {:else}
-        <div class="flex flex-col gap-6">
+        <div class="flex flex-col gap-6 pb-16">
           {#each filteredArticles as article (article.id)}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -628,7 +628,7 @@
                 {@html article.title}
               </h3>
               <p
-                class="text-[1em] text-text-secondary leading-relaxed line-clamp-10 wrap-break-word"
+                class="text-[1em] text-text-main-2/70 leading-relaxed line-clamp-10 wrap-break-word"
               >
                 {article.description_vn ||
                   article.description ||
