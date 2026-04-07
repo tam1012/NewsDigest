@@ -18,14 +18,6 @@
   })
 
   onMount(() => {
-    const saved = localStorage.getItem('darkMode')
-    if (saved !== null) {
-      $prefs.darkMode = saved === 'true'
-    } else {
-      $prefs.darkMode = window.matchMedia(
-        '(prefers-color-scheme: dark)',
-      ).matches
-    }
     mounted = true
 
     initBodyScrollbars({
@@ -54,6 +46,10 @@
       allThemeMeta.forEach((el, i) => {
         if (i > 0) el.remove()
       })
+
+      // Persist font size & apply CSS custom property
+      localStorage.setItem('fontSize', String($prefs.fontSize))
+      document.documentElement.style.setProperty('--font-size-base', `${$prefs.fontSize}px`)
     }
   })
 </script>

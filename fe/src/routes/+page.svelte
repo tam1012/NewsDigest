@@ -3,12 +3,11 @@
   import { browser } from '$app/environment'
   import { goto } from '$app/navigation'
   import { filters } from '$lib/stores/articles'
-  import { prefs } from '$lib/stores/prefs'
+  import { prefs, cycleFontSize } from '$lib/stores/prefs'
   import {
     ChevronLeft,
     ChevronRight,
     Clock,
-    ExternalLink,
     Link2,
     Loader2,
     Moon,
@@ -547,7 +546,7 @@
     {/if}
 
     <!-- Mobile Article List / Digest (body scroll) -->
-    <div class="mobile-content">
+    <div class="mobile-content" style="font-size: var(--font-size-base);">
       {#if loading}
         <div class="flex flex-col gap-8 animate-pulse">
           {#each Array(6) as _}
@@ -597,7 +596,7 @@
               onclick={() => selectArticle(article)}
             >
               <div
-                class="flex items-center text-[0.625rem] text-text-secondary uppercase tracking-wider mb-2"
+                class="flex items-center text-[0.625em] text-text-secondary uppercase tracking-wider mb-2"
               >
                 <span class="truncate pr-4"
                   >{getSourceName(article.source_id)}</span
@@ -612,11 +611,11 @@
                 </span>
               </div>
               <h3
-                class="font-serif text-[1rem] leading-[1.4] mb-2 font-semibold text-text-main group-hover:underline underline-offset-4 transition-all"
+                class="font-serif text-[1em] leading-[1.4] mb-2 font-semibold text-text-main group-hover:underline underline-offset-4 transition-all"
               >
                 {@html article.title}
               </h3>
-              <p class="text-sm text-text-secondary leading-relaxed">
+              <p class="text-[0.875em] text-text-secondary leading-relaxed">
                 {article.description_vn ||
                   article.description ||
                   article.summary
@@ -654,7 +653,7 @@
 <!-- ═══════════════ DESKTOP LAYOUT ═══════════════ -->
 <div class="hidden md:contents">
   <div class="flex mx-auto max-w-340 sm:px-6">
-    <aside class="h-svh sticky top-0 border-r w-108 flex flex-col">
+    <aside class="h-svh sticky top-0 border-r w-88 lg:w-108 flex flex-col">
       <!-- Top Header / Navigator -->
       <nav
         class=" absolute z-10 flex justify-between px-6 top-6 left-0 right-0"
@@ -818,6 +817,7 @@
         defer
         options={{ scrollbars: { autoHide: 'leave', autoHideDelay: 300 } }}
         class="px-6 py-24"
+        style="font-size: var(--font-size-base);"
       >
         <!-- Active filter bar (desktop) -->
         {#if hasActiveFilter}
@@ -888,7 +888,7 @@
                 onclick={() => selectArticle(article)}
               >
                 <div
-                  class="flex items-center text-[0.625rem] text-text-secondary uppercase tracking-wider mb-2"
+                  class="flex items-center text-[0.625em] text-text-secondary uppercase tracking-wider mb-2"
                 >
                   <span class="truncate pr-4"
                     >{getSourceName(article.source_id)}</span
@@ -903,11 +903,11 @@
                   </span>
                 </div>
                 <h3
-                  class="font-serif text-[1rem] leading-[1.4] mb-2 font-semibold text-text-main group-hover:underline underline-offset-4 transition-all"
+                  class="font-serif text-[1em] leading-[1.4] mb-2 font-semibold text-text-main group-hover:underline underline-offset-4 transition-all"
                 >
                   {@html article.title}
                 </h3>
-                <p class="text-sm text-text-secondary leading-relaxed">
+                <p class="text-[0.875em] text-text-secondary leading-relaxed">
                   {article.description_vn ||
                     article.description ||
                     article.summary
@@ -956,13 +956,12 @@
           >
           <div class="ml-auto flex gap-1">
             <CusButton
-              href={selectedArticle.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              class="size-8"
+              onclick={() => ($prefs.fontSize = cycleFontSize($prefs.fontSize))}
+              class="size-8 text-xs font-bold"
+              title="Đổi cỡ chữ"
             >
-              <ExternalLink size={16} /></CusButton
-            >
+              {$prefs.fontSize}
+            </CusButton>
             <CusButton
               onclick={() => ($prefs.darkMode = !$prefs.darkMode)}
               class="size-8"
@@ -975,9 +974,9 @@
             </CusButton>
           </div>
         </div>
-        <div class="flex flex-col pb-4 pt-8 gap-4">
+        <div class="flex flex-col pb-4 pt-8 gap-4" style="font-size: var(--font-size-base);">
           <div
-            class="flex justify-center gap-4 items-center text-xs text-text-secondary"
+            class="flex justify-center gap-4 items-center text-[0.75em] text-text-secondary"
           >
             <p class="flex items-center gap-1.5">
               <Clock size={14} />
@@ -1005,7 +1004,7 @@
             class="hover:underline flex justify-center underline-offset-4"
           >
             <h1
-              class="font-serif text-xl text-center text-balance md:text-2xl font-bold leading-[1.2] text-text-main inline"
+              class="font-serif text-[1.25em] text-center text-balance md:text-[1.5em] font-bold leading-[1.2] text-text-main inline"
             >
               {@html selectedArticle.title}
             </h1>

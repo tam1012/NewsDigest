@@ -4,12 +4,12 @@
     ChevronLeft,
     ChevronRight,
     Clock,
-    ExternalLink,
     Link2,
     X,
   } from 'lucide-svelte'
   import type { Article } from '$lib/types'
   import CusButton from '$lib/components/ui/CusButton.svelte'
+  import { prefs, cycleFontSize } from '$lib/stores/prefs'
 
   let {
     open = false,
@@ -272,7 +272,7 @@
     type="button"
     bind:this={drawerBackdrop}
     id="news-mobile-sheet-backdrop"
-    class="absolute inset-0 bg-black/40 opacity-0 pointer-events-none"
+    class="absolute inset-0 opacity-0 pointer-events-none"
     aria-label="Đóng khung chi tiết bài viết"
     onclick={requestClose}
   ></button>
@@ -310,12 +310,11 @@
         </div>
         <div class="flex gap-1">
           <CusButton
-            href={selectedArticle.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="size-8"
+            onclick={() => ($prefs.fontSize = cycleFontSize($prefs.fontSize))}
+            class="size-8 text-xs font-bold"
+            title="Đổi cỡ chữ"
           >
-            <ExternalLink size={16} />
+            {$prefs.fontSize}
           </CusButton>
           <CusButton onclick={requestClose} class="size-8">
             <X size={16} />
@@ -327,13 +326,14 @@
         bind:this={drawerBody}
         role="presentation"
         class="drawer-body custom-scrollbar"
+        style="font-size: var(--font-size-base);"
         ontouchstart={onBodyTouchStart}
         ontouchmove={onBodyTouchMove}
         ontouchend={onBodyTouchEnd}
         ontouchcancel={onBodyTouchEnd}
       >
         <div
-          class="flex justify-center gap-4 items-center text-xs text-text-secondary mb-4"
+          class="flex justify-center gap-4 items-center text-[0.75em] text-text-secondary mb-4"
         >
           <p class="flex items-center gap-1.5">
             <Clock size={14} />
@@ -361,7 +361,7 @@
           class="hover:underline flex justify-center underline-offset-4"
         >
           <h1
-            class="font-serif text-xl font-bold leading-[1.2] text-text-main mb-6 inline"
+            class="font-serif text-[1.25em] font-bold leading-[1.2] text-text-main mb-6 inline"
           >
             {@html selectedArticle.title}
           </h1>

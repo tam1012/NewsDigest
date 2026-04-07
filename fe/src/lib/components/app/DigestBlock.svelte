@@ -87,7 +87,7 @@
     </div>
   </CardHeader>
   <CardContent class="pt-4">
-    <div class="text-[15px] leading-relaxed text-foreground/90">
+    <div class="text-[0.9375em] leading-relaxed text-foreground/90">
       {#each segments as seg}
         {#if seg.type === 'text'}
           {seg.content}

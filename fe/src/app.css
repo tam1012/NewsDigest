@@ -56,6 +56,7 @@
 }
 
 :root {
+  --font-size-base: 16px;
   --background: 0 0% 100%;
   --text-main: 60 2.521% 23.33%;
   --text-main-2: 60 2.564% 7.647%;
@@ -82,6 +83,11 @@
   --destructive-foreground: 210 40% 98%;
   --ring: 222.2 84% 4.9%;
   --radius: 0.5rem;
+}
+
+/* Apply font size to article prose content */
+.prose {
+  font-size: var(--font-size-base) !important;
 }
 
 .dark {

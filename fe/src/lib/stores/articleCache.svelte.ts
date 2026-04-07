@@ -31,7 +31,7 @@ const digestCache = new Map<string, Digest | null>();
 // ── Reactive state exposed to components ─────────────
 let _articles = $state<Article[]>([]);
 let _digest = $state<Digest | null>(null);
-let _loading = $state(false);      // initial full-page load
+let _loading = $state(true);       // initial full-page load (starts true to prevent empty flash)
 let _refreshing = $state(false);   // background sync for new articles
 let _loadingMore = $state(false);  // background loading remaining batches
 let _currentDate = $state('');
