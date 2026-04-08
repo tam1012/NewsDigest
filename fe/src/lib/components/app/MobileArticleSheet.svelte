@@ -300,6 +300,9 @@
         ontouchcancel={onBodyTouchEnd}
       >
         <div
+          class="fixed top-6 left-2 right-2 h-7 pointer-events-none bg-linear-to-b from-10% from-bg-2 to-bg-2/0"
+        ></div>
+        <div
           class="flex justify-center gap-4 items-center text-[0.75em] text-text-secondary mb-4"
         >
           <p class="flex items-center gap-1.5">
@@ -345,7 +348,7 @@
       </div>
 
       <div
-        class="fixed bottom-0 left-0 right-0 py-6 px-4 bg-linear-to-t from-10% from-bg-2 to-bg-2/0"
+        class="fixed bottom-0 left-0 right-0 pb-8 pt-4 px-4 bg-linear-to-t from-10% from-bg-2 to-bg-2/0"
       >
         <div class="flex gap-3">
           <CusButton onclick={onPrev} disabled={!canGoPrev} class="h-10 flex-1">

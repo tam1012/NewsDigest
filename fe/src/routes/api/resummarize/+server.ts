@@ -17,8 +17,9 @@ export const POST: RequestHandler = async ({ platform }) => {
   };
 
   try {
-    // Step 1: Enqueue unsummarized articles for content scraping + AI summarize
-    // The queue consumer handles both scrape and AI in one pipeline
+    // Enqueue unsummarized articles into the Queue.
+    // The queue consumer handles scrape + AI summarize asynchronously —
+    // we no longer call Gemini here to avoid the 30s Pages Function timeout.
     const enqueueRes = await fetch(`${apiUrl}/api/articles/enqueue-scrape`, {
       method: 'POST',
       headers,
@@ -26,19 +27,10 @@ export const POST: RequestHandler = async ({ platform }) => {
     });
     const enqueueData = await enqueueRes.json() as Record<string, unknown>;
 
-    // Step 2: Also retry AI for articles that already have content but AI failed
-    const resummarizeRes = await fetch(`${apiUrl}/api/articles/resummarize`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ limit: 20, delayMs: 3000 }),
-    });
-    const resummarizeData = await resummarizeRes.json() as Record<string, unknown>;
-
     return json({
       ok: true,
       enqueued: enqueueData.enqueued ?? 0,
-      summarized: resummarizeData.summarized ?? 0,
-      failed: resummarizeData.failed ?? 0,
+      enqueuedAt: Date.now(),
     });
   } catch (err: any) {
     console.error('Resummarize proxy error:', err.message);

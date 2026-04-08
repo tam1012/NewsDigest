@@ -37,12 +37,28 @@
   let unsummarizedCount = $derived(articleCache.unsummarizedCount)
 
   let resummarizing = $state(false)
-  let resummarizeResult: {
-    summarized: number
-    failed: number
-    enqueued: number
-  } | null = $state(null)
+  // Timestamp (ms) until which the AI button is hidden after enqueue.
+  // null = show button normally.
+  let aiHideUntil = $state<number | null>(null)
+  // Number of articles enqueued in the last action (for the toast message).
+  let lastEnqueued = $state(0)
+  // Whether the toast is visible
+  let showEnqueueToast = $state(false)
   let isAdmin = $state(false)
+
+  // Derived: is the button still within its hide window?
+  let aiButtonHidden = $derived(
+    aiHideUntil !== null && Date.now() < aiHideUntil,
+  )
+
+  // Human-readable countdown label (e.g. "~2 phút")
+  let aiEstimateLabel = $derived.by(() => {
+    if (!aiHideUntil) return ''
+    const remainSec = Math.ceil((aiHideUntil - Date.now()) / 1000)
+    if (remainSec <= 0) return ''
+    if (remainSec < 60) return `~${remainSec}s`
+    return `~${Math.ceil(remainSec / 60)} phút`
+  })
 
   // ── Mobile / Drawer state ──────────────────────────────────
   let drawerOpen = $state(false)
@@ -113,20 +129,31 @@
 
   // Resummarize handler
   async function handleResummarize() {
-    if (resummarizing) return
+    if (resummarizing || aiButtonHidden) return
     resummarizing = true
-    resummarizeResult = null
     try {
       const res = await fetch('/api/resummarize', { method: 'POST' })
       const result = await res.json()
       if (result.ok !== false) {
-        resummarizeResult = {
-          summarized: result.summarized ?? 0,
-          failed: result.failed ?? 0,
-          enqueued: result.enqueued ?? 0,
-        }
-        // Reload data after queue processing to pick up resummarized articles
-        setTimeout(() => articleCache.forceRefresh(data.currentDate), 5000)
+        const enqueued = result.enqueued ?? 0
+        lastEnqueued = enqueued
+
+        // Estimated processing time: 6s per article, minimum 30s, max 3 minutes
+        const estimatedMs = Math.min(
+          Math.max(30_000, enqueued * 6_000),
+          3 * 60_000,
+        )
+        aiHideUntil = Date.now() + estimatedMs
+
+        // Show toast
+        showEnqueueToast = true
+        setTimeout(() => (showEnqueueToast = false), 6000)
+
+        // Refresh after estimated time so button can reappear if still needed
+        setTimeout(() => {
+          aiHideUntil = null
+          articleCache.forceRefresh(data.currentDate)
+        }, estimatedMs)
       }
     } catch (e) {
       console.error('Resummarize failed', e)
@@ -373,9 +400,12 @@
 
 <!-- ═══════════════ MOBILE LAYOUT ═══════════════ -->
 <div class=" md:hidden">
-  <div class="mobile-layout" style="background-color: var(--color-bg-1);">
+  <div class="mobile-layout relative bg-bg-1">
+    <div
+      class="fixed top-0 left-2 right-2 h-6 pointer-events-none bg-linear-to-b from-10% from-bg-1 to-bg-1/0 z-10"
+    ></div>
     <!-- Mobile Top Header / Navigator -->
-    <nav class="flex justify-between p-4">
+    <nav class="flex justify-between px-4 py-8">
       <div class="flex gap-3">
         <CusButton onclick={() => goToDate(-1)} class="size-10">
           <ChevronLeft class="-translate-x-px" size={20} />
@@ -451,8 +481,26 @@
         </CusButton>
       </div>
     </nav>
+    <!-- Enqueue toast (mobile) -->
+    {#if showEnqueueToast}
+      <div
+        class="fixed z-50 bottom-24 left-4 right-4 flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium shadow-lg"
+        style="background: var(--color-bg-1); border: 1px solid color-mix(in srgb, currentColor 12%, transparent);"
+        in:slideScaleFade={{ duration: 250, startScale: 0.92, startOpacity: 0 }}
+        out:slideScaleFade={{
+          duration: 200,
+          startScale: 0.92,
+          startOpacity: 0,
+        }}
+      >
+        <Sparkles size={14} class="shrink-0 text-violet-500" />
+        <span
+          >Đã xếp hàng <strong>{lastEnqueued}</strong> bài · hoàn tất sau {aiEstimateLabel}</span
+        >
+      </div>
+    {/if}
     <div class=" fixed z-40 flex gap-3 bottom-6 right-4">
-      {#if isAdmin && unsummarizedCount > 0}
+      {#if isAdmin && unsummarizedCount > 0 && !aiButtonHidden}
         <!-- svelte-ignore a11y_consider_explicit_label -->
         <CusButton
           onclick={handleResummarize}
@@ -464,11 +512,7 @@
           {:else}
             <Sparkles size={14} />
           {/if}
-          <span
-            >{resummarizing
-              ? 'Đang xử lý...'
-              : `AI (${unsummarizedCount})`}</span
-          >
+          <span>{resummarizing ? '...' : `AI (${unsummarizedCount})`}</span>
         </CusButton>
       {/if}
       <!-- svelte-ignore a11y_consider_explicit_label -->
@@ -729,7 +773,7 @@
         </div>
         <div class="flex gap-1">
           <SourceFilter {articles} size="sm" />
-          {#if isAdmin && unsummarizedCount > 0}
+          {#if isAdmin && unsummarizedCount > 0 && !aiButtonHidden}
             <!-- svelte-ignore a11y_consider_explicit_label -->
             <CusButton
               onclick={handleResummarize}
@@ -741,12 +785,28 @@
               {:else}
                 <Sparkles size={14} />
               {/if}
-              <span
-                >{resummarizing
-                  ? 'Đang xử lý...'
-                  : `AI (${unsummarizedCount})`}</span
-              >
+              <span>{resummarizing ? '...' : `AI (${unsummarizedCount})`}</span>
             </CusButton>
+          {/if}
+          <!-- Enqueue toast (desktop) -->
+          {#if showEnqueueToast}
+            <div
+              class="flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium"
+              style="background: color-mix(in srgb, var(--color-bg-1) 80%, transparent); border: 1px solid color-mix(in srgb, currentColor 12%, transparent);"
+              in:slideScaleFade={{
+                duration: 250,
+                startScale: 0.92,
+                startOpacity: 0,
+              }}
+              out:slideScaleFade={{
+                duration: 200,
+                startScale: 0.92,
+                startOpacity: 0,
+              }}
+            >
+              <Sparkles size={12} class="text-violet-500 shrink-0" />
+              <span>{lastEnqueued} bài · {aiEstimateLabel}</span>
+            </div>
           {/if}
           <!-- svelte-ignore a11y_consider_explicit_label -->
           <CusButton
