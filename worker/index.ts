@@ -1,6 +1,7 @@
 import { Env, ContentScrapeMessage } from './types';
 import { scheduled } from './cron/index';
 import { scheduledDigest } from './cron/digest';
+import { retryFailedArticles } from './cron/retry-failed';
 import { handleContentQueue } from './queue/content-scraper';
 
 export default {
@@ -9,10 +10,20 @@ export default {
     return app.fetch(request, env, ctx);
   },
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-    // Pass cron pattern để phân biệt: general (every 3h) vs github-trending (daily)
+    const isRetryOnlyCron = event.cron === '*/30 * * * *';
+    const isGitHubTrendingCron = event.cron === '0 1 * * *';
+
+    if (isRetryOnlyCron) {
+      // Cron 30 phút: chỉ retry bản tin lỗi, không scrape thêm nguồn mới
+      await retryFailedArticles(env);
+      return;
+    }
+
+    // Cron general (every 3h) hoặc github-trending (daily): scrape nguồn mới
     await scheduled(event, env, ctx, event.cron);
+
     // Chỉ tạo/cập nhật digest cho cron general, không cần cho github-trending
-    if (event.cron !== '0 1 * * *') {
+    if (!isGitHubTrendingCron) {
       await scheduledDigest(env);
     }
   },

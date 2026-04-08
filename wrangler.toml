@@ -17,7 +17,7 @@ binding = "SCRAPER_CONFIG"
 id = "bd78d3ac29eb432682cb60de67df3f9f"
 
 [triggers]
-crons = ["0 */3 * * *", "0 1 * * *"]
+crons = ["0 */3 * * *", "0 1 * * *", "*/30 * * * *"]
 
 [[queues.producers]]
 queue = "article-content-queue"
