@@ -9,6 +9,108 @@ function normalizeDate(raw?: string | null): string {
   return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
 }
 
+function nodeText(value: any): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const t = nodeText(item);
+      if (t) return t;
+    }
+    return '';
+  }
+  if (typeof value === 'object') {
+    if (typeof value._text === 'string') return value._text.trim();
+    if (typeof value['#text'] === 'string') return value['#text'].trim();
+  }
+  return '';
+}
+
+function extractItemLink(item: any): string {
+  const link = item?.link;
+  if (!link) return '';
+
+  if (typeof link === 'string') return link;
+  if (Array.isArray(link)) {
+    for (const part of link) {
+      if (typeof part === 'string' && part) return part;
+      if (part && typeof part === 'object') {
+        if (part['@_rel'] === 'alternate' && part['@_href']) return String(part['@_href']);
+        if (part['@_href']) return String(part['@_href']);
+      }
+    }
+    return '';
+  }
+  if (typeof link === 'object' && link['@_href']) return String(link['@_href']);
+
+  return '';
+}
+
+function parseRssOrAtom(xml: string): { items: any[]; format: 'rss' | 'atom' } | null {
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    textNodeName: '_text',
+  });
+  let result: any;
+  try {
+    result = parser.parse(xml);
+  } catch {
+    return null;
+  }
+
+  if (result?.rss?.channel) {
+    const raw = result.rss.channel.item;
+    const items = raw ? (Array.isArray(raw) ? raw : [raw]) : [];
+    return { items, format: 'rss' };
+  }
+
+  if (result?.feed) {
+    const raw = result.feed.entry;
+    const items = raw ? (Array.isArray(raw) ? raw : [raw]) : [];
+    return { items, format: 'atom' };
+  }
+
+  return null;
+}
+
+function isLikelyHtml(contentType: string, text: string): boolean {
+  const ct = contentType.toLowerCase();
+  if (ct.includes('text/html')) return true;
+  const sample = text.slice(0, 800).toLowerCase();
+  return sample.includes('<!doctype html') || sample.includes('<html');
+}
+
+function cleanText(input: string): string {
+  return input.replace(/\s+/g, ' ').trim();
+}
+
+function slugToTitle(pathname: string): string {
+  const seg = pathname.split('/').filter(Boolean).pop() || '';
+  const withoutExt = seg.replace(/\.[a-z0-9]+$/i, '');
+  const text = withoutExt.replace(/[-_]+/g, ' ').trim();
+  if (!text) return '';
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function isLikelyArticlePath(pathname: string): boolean {
+  const p = pathname.toLowerCase();
+  if (!p || p === '/' || p === '/blog') return false;
+  if (/\.(xml|json|png|jpg|jpeg|webp|svg|gif|ico|pdf|zip)$/i.test(p)) return false;
+  if (/\/(tag|tags|category|categories|author|authors|about|careers|privacy|terms|contact|search)\b/.test(p)) return false;
+  if (/\/page\/\d+\/?$/.test(p)) return false;
+  const segments = p.split('/').filter(Boolean);
+  return segments.length >= 1;
+}
+
+function isLikelyVercelBlogArticle(pathname: string): boolean {
+  const p = pathname.toLowerCase();
+  if (!p.startsWith('/blog/')) return false;
+  if (/^\/blog\/?$/.test(p)) return false;
+  if (/^\/blog\/(tag|tags|category|categories|author|authors)\b/.test(p)) return false;
+  return p.split('/').filter(Boolean).length >= 2;
+}
+
 export async function fetchSource(source: Source, env: Env): Promise<ArticleInput[]> {
   const type = source.type;
   if (type === 'reddit') {
@@ -110,33 +212,43 @@ async function fetchRSS(source: Source): Promise<ArticleInput[]> {
     headers: { 'User-Agent': 'NewsDigest/1.0.0' }
   });
   if (!response.ok) throw new Error(`RSS feed failed: ${response.status}`);
-  
+
+  const contentType = response.headers.get('content-type') || '';
   const xml = await response.text();
-  const parser = new XMLParser({
-    ignoreAttributes: false,
-    textNodeName: "_text",
-  });
-  const result: any = parser.parse(xml);
-  
-  let items = [];
-  if (result.rss && result.rss.channel && result.rss.channel.item) {
-    items = Array.isArray(result.rss.channel.item) ? result.rss.channel.item : [result.rss.channel.item];
-  } else if (result.feed && result.feed.entry) {
-    items = Array.isArray(result.feed.entry) ? result.feed.entry : [result.feed.entry];
+  if (isLikelyHtml(contentType, xml)) {
+    throw new Error(`RSS feed returned HTML for ${source.url}. Please use feed URL (XML).`);
   }
 
-  return items.slice(0, 20).map((item: any) => {
-    let link = item.link;
-    if (typeof link === 'object' && link['@_href']) {
-      link = link['@_href'];
+  const parsed = parseRssOrAtom(xml);
+  if (!parsed) {
+    throw new Error(`Invalid RSS/Atom payload for ${source.url}`);
+  }
+
+  const mapped = parsed.items.slice(0, 20).map((item: any) => {
+    let link = extractItemLink(item);
+    if (link && !/^https?:\/\//i.test(link)) {
+      try {
+        link = new URL(link, source.url).toString();
+      } catch {
+        link = '';
+      }
     }
+
+    const title = nodeText(item.title);
+    const desc = nodeText(item.description) || nodeText(item.content) || nodeText(item.summary);
+    const published = item.pubDate || item.published || item.updated || item.dc?.date;
+
     return {
       url: link,
-      title: item.title,
-      description: item.description || item.content || item['_text'] || '',
-      published_at: normalizeDate(item.pubDate || item.published)
+      title,
+      description: desc,
+      published_at: normalizeDate(published),
     };
   });
+
+  const valid = mapped.filter(item => item.url && item.title);
+  console.log(`[scraper] RSS ${source.url}: parsed ${parsed.items.length} items, valid ${valid.length}`);
+  return valid;
 }
 
 async function fetchVoz(source: Source): Promise<ArticleInput[]> {
@@ -317,8 +429,99 @@ async function fetchGitHubTrending(source: Source): Promise<ArticleInput[]> {
 }
 
 async function fetchUnknown(source: Source): Promise<ArticleInput[]> {
-  console.log(`Fallback fetch for HTML source ${source.url} not fully implemented yet.`);
-  return [];
+  const response = await fetch(source.url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml',
+    },
+    redirect: 'follow',
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!response.ok) throw new Error(`HTML source failed: ${response.status}`);
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('text/html')) {
+    throw new Error(`HTML source is not text/html: ${contentType || 'unknown'}`);
+  }
+
+  const finalUrl = response.url || source.url;
+  const pageHost = new URL(finalUrl).hostname.replace(/^www\./, '').toLowerCase();
+  const sourceHost = new URL(source.url).hostname.replace(/^www\./, '').toLowerCase();
+
+  const candidates = new Map<string, { title: string; score: number }>();
+
+  function pushCandidate(rawHref: string, rawTitle: string, score: number) {
+    const href = (rawHref || '').trim();
+    if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('javascript:')) return;
+
+    let normalized: URL;
+    try {
+      normalized = new URL(href, finalUrl);
+    } catch {
+      return;
+    }
+
+    const hostname = normalized.hostname.replace(/^www\./, '').toLowerCase();
+    if (!(hostname === sourceHost || hostname.endsWith(`.${sourceHost}`) || sourceHost.endsWith(`.${hostname}`))) return;
+
+    normalized.hash = '';
+    normalized.search = '';
+    const pathname = normalized.pathname.replace(/\/+$/, '') || '/';
+
+    let isArticle = isLikelyArticlePath(pathname);
+    if (sourceHost === 'vercel.com') {
+      isArticle = isLikelyVercelBlogArticle(pathname);
+    }
+    if (!isArticle) return;
+
+    const title = cleanText(rawTitle) || slugToTitle(pathname);
+    if (!title) return;
+
+    const key = normalized.toString();
+    const prev = candidates.get(key);
+    if (!prev || score > prev.score || title.length > prev.title.length) {
+      candidates.set(key, { title, score });
+    }
+  }
+
+  let currentHref = '';
+  let currentText = '';
+
+  const selector = sourceHost === 'vercel.com'
+    ? 'a[href^="/blog/"], a[href*="://vercel.com/blog/"]'
+    : 'a[href]';
+
+  const rewriter = new HTMLRewriter()
+    .on(selector, {
+      element(el: Element) {
+        const href = el.getAttribute('href') || '';
+        currentHref = href;
+        currentText = '';
+        el.onEndTag(() => {
+          const score = sourceHost === 'vercel.com' ? 100 : (currentHref.startsWith('/') ? 60 : 40);
+          pushCandidate(currentHref, currentText, score);
+          currentHref = '';
+          currentText = '';
+        });
+      },
+      text(text: Text) {
+        currentText += ` ${text.text}`;
+      },
+    });
+
+  await rewriter.transform(response).text();
+
+  const result = [...candidates.entries()]
+    .sort((a, b) => b[1].score - a[1].score || b[1].title.length - a[1].title.length)
+    .slice(0, 20)
+    .map(([url, value]) => ({
+      url,
+      title: value.title,
+      published_at: new Date().toISOString(),
+    }));
+
+  console.log(`[scraper] HTML ${pageHost}: extracted ${result.length} listing items from ${source.url}`);
+  return result;
 }
 
 /**
@@ -454,4 +657,3 @@ export async function extractArticleContent(url: string): Promise<string> {
     return '';
   }
 }
-

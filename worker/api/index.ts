@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { Env } from '../types';
+import { XMLParser } from 'fast-xml-parser';
+import { Env, Source } from '../types';
 import type { Context } from 'hono';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -21,6 +22,179 @@ function normalizeDate(raw?: string | null): string {
   if (!raw) return new Date().toISOString();
   const d = new Date(raw);
   return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
+
+const COMMON_FEED_PATHS = [
+  '/rss',
+  '/rss/',
+  '/rss.xml',
+  '/feed',
+  '/feed/',
+  '/feed.xml',
+  '/atom.xml',
+  '/index.xml',
+];
+
+const ALLOWED_SOURCE_TYPES: Source['type'][] = ['rss', 'html', 'reddit', 'youtube', 'voz', 'github-trending'];
+
+function parseFeedShape(xml: string): boolean {
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    textNodeName: '_text',
+  });
+  try {
+    const parsed: any = parser.parse(xml);
+    return Boolean(parsed?.rss?.channel || parsed?.feed);
+  } catch {
+    return false;
+  }
+}
+
+function isHtmlLike(contentType: string, text: string): boolean {
+  const ct = contentType.toLowerCase();
+  if (ct.includes('text/html')) return true;
+  const sample = text.slice(0, 800).toLowerCase();
+  return sample.includes('<!doctype html') || sample.includes('<html');
+}
+
+function getAttr(tag: string, attr: string): string {
+  const re = new RegExp(`${attr}\\s*=\\s*(['"])(.*?)\\1`, 'i');
+  return (tag.match(re)?.[2] || '').trim();
+}
+
+function extractCanonicalUrl(html: string, fallbackUrl: string): string {
+  const tags = html.match(/<link\b[^>]*>/gi) || [];
+  for (const tag of tags) {
+    const rel = getAttr(tag, 'rel').toLowerCase();
+    if (!rel.split(/\s+/).includes('canonical')) continue;
+    const href = getAttr(tag, 'href');
+    if (!href) continue;
+    try {
+      return new URL(href, fallbackUrl).toString();
+    } catch {
+      continue;
+    }
+  }
+  return fallbackUrl;
+}
+
+function extractFeedLinksFromHtml(html: string, baseUrl: string): string[] {
+  const tags = html.match(/<link\b[^>]*>/gi) || [];
+  const links: string[] = [];
+  for (const tag of tags) {
+    const rel = getAttr(tag, 'rel').toLowerCase();
+    const type = getAttr(tag, 'type').toLowerCase();
+    const href = getAttr(tag, 'href');
+    if (!href) continue;
+    if (!rel.split(/\s+/).includes('alternate')) continue;
+    if (!(type.includes('application/rss+xml') || type.includes('application/atom+xml'))) continue;
+
+    try {
+      links.push(new URL(href, baseUrl).toString());
+    } catch {
+      // ignore invalid URLs
+    }
+  }
+  return [...new Set(links)];
+}
+
+async function isValidFeedUrl(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'NewsDigest/1.0.0' },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return false;
+    const text = await res.text();
+    const contentType = res.headers.get('content-type') || '';
+    if (isHtmlLike(contentType, text)) return false;
+    return parseFeedShape(text);
+  } catch {
+    return false;
+  }
+}
+
+function detectSpecialType(url: string): Source['type'] | null {
+  const lower = url.toLowerCase();
+  if (lower.includes('reddit.com')) return 'reddit';
+  if (lower.includes('youtube.com') || lower.includes('youtu.be')) return 'youtube';
+  if (lower.includes('voz.vn')) return 'voz';
+  if (lower.includes('github.com/trending')) return 'github-trending';
+  return null;
+}
+
+async function resolveSource(url: string): Promise<{
+  resolved_url: string;
+  detected_type: Source['type'];
+  detection_method: string;
+}> {
+  const normalizedInput = new URL(url).toString();
+  const special = detectSpecialType(normalizedInput);
+  if (special) {
+    return {
+      resolved_url: normalizedInput,
+      detected_type: special,
+      detection_method: 'known-source-type',
+    };
+  }
+
+  const initial = await fetch(normalizedInput, {
+    headers: { 'User-Agent': 'NewsDigest/1.0.0' },
+    redirect: 'follow',
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!initial.ok) {
+    throw new Error(`Source URL failed: ${initial.status}`);
+  }
+
+  const finalUrl = initial.url || normalizedInput;
+  const body = await initial.text();
+  const contentType = initial.headers.get('content-type') || '';
+
+  if (!isHtmlLike(contentType, body) && parseFeedShape(body)) {
+    return {
+      resolved_url: finalUrl,
+      detected_type: 'rss',
+      detection_method: 'direct-xml',
+    };
+  }
+
+  const canonicalUrl = extractCanonicalUrl(body, finalUrl);
+  const fromHtml = extractFeedLinksFromHtml(body, canonicalUrl);
+  for (const candidate of fromHtml) {
+    if (await isValidFeedUrl(candidate)) {
+      return {
+        resolved_url: candidate,
+        detected_type: 'rss',
+        detection_method: 'html-link-alternate',
+      };
+    }
+  }
+
+  const canonical = new URL(canonicalUrl);
+  const pathParts = canonical.pathname.split('/').filter(Boolean);
+  const basePath = pathParts.length > 0 ? `/${pathParts[0]}` : '';
+  const candidates = [
+    ...COMMON_FEED_PATHS.map((p) => `${canonical.origin}${p}`),
+    ...(basePath ? COMMON_FEED_PATHS.map((p) => `${canonical.origin}${basePath}${p}`) : []),
+  ];
+
+  for (const candidate of [...new Set(candidates)]) {
+    if (await isValidFeedUrl(candidate)) {
+      return {
+        resolved_url: candidate,
+        detected_type: 'rss',
+        detection_method: 'common-path',
+      };
+    }
+  }
+
+  return {
+    resolved_url: canonicalUrl,
+    detected_type: 'html',
+    detection_method: 'html-fallback',
+  };
 }
 
 app.use('/api/*', cors());
@@ -414,17 +588,40 @@ app.post('/api/sources', async (c) => {
     if (authErr) return authErr;
 
     const { url, name, group_name } = await c.req.json();
-    let type = 'rss';
-    if (url.includes('reddit.com')) type = 'reddit';
-    else if (url.includes('youtube.com') || url.includes('youtu.be')) type = 'youtube';
-    else if (url.includes('voz.vn')) type = 'voz';
+    if (!url || typeof url !== 'string') return c.json({ error: 'url is required' }, 400);
+
+    let resolved;
+    try {
+      resolved = await resolveSource(url);
+    } catch (e: any) {
+      return c.json({ error: e?.message || 'Failed to resolve source URL' }, 400);
+    }
 
     const id = crypto.randomUUID();
     await c.env.DB.prepare(
         'INSERT INTO sources (id, url, name, type, group_name, enabled) VALUES (?, ?, ?, ?, ?, 1)'
-    ).bind(id, url, name || 'Custom Source', type, group_name || 'General').run();
+    ).bind(
+      id,
+      resolved.resolved_url,
+      name || 'Custom Source',
+      resolved.detected_type,
+      group_name || 'General',
+    ).run();
 
-    return c.json({ ok: true, source: { id, url, name: name || 'Custom Source', type, group_name: group_name || 'General', enabled: 1 } });
+    return c.json({
+      ok: true,
+      source: {
+        id,
+        url: resolved.resolved_url,
+        name: name || 'Custom Source',
+        type: resolved.detected_type,
+        group_name: group_name || 'General',
+        enabled: 1
+      },
+      resolved_url: resolved.resolved_url,
+      detected_type: resolved.detected_type,
+      detection_method: resolved.detection_method,
+    });
 });
 
 app.patch('/api/sources/:id', async (c) => {
@@ -439,6 +636,21 @@ app.patch('/api/sources/:id', async (c) => {
     if (body.enabled !== undefined) { sets.push('enabled = ?'); binds.push(body.enabled ? 1 : 0); }
     if (body.name !== undefined) { sets.push('name = ?'); binds.push(body.name); }
     if (body.group_name !== undefined) { sets.push('group_name = ?'); binds.push(body.group_name); }
+    if (body.url !== undefined) {
+      if (typeof body.url !== 'string' || !body.url.trim()) return c.json({ error: 'Invalid url' }, 400);
+      try {
+        const normalizedUrl = new URL(body.url.trim()).toString();
+        sets.push('url = ?');
+        binds.push(normalizedUrl);
+      } catch {
+        return c.json({ error: 'Invalid url' }, 400);
+      }
+    }
+    if (body.type !== undefined) {
+      if (!ALLOWED_SOURCE_TYPES.includes(body.type)) return c.json({ error: 'Invalid type' }, 400);
+      sets.push('type = ?');
+      binds.push(body.type);
+    }
 
     if (sets.length === 0) return c.json({ error: 'No fields to update' }, 400);
 

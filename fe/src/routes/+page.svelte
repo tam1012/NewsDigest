@@ -667,7 +667,7 @@
                 </span>
               </div>
               <h3
-                class="font-serif text-[1.125em] leading-[1.4] mb-2 font-semibold text-text-main group-hover:underline underline-offset-4 transition-all"
+                class="font-serif text-[1.125em] leading-[1.4] mb-2 font-semibold text-text-main group-hover:underline underline-offset-4 transition-all line-clamp-4 wrap-break-word"
               >
                 {@html article.title}
               </h3>
@@ -977,7 +977,7 @@
                   </span>
                 </div>
                 <h3
-                  class="font-serif text-[1.125em] leading-[1.4] mb-2 font-semibold text-text-main group-hover:underline underline-offset-4 transition-all"
+                  class="font-serif text-[1.125em] leading-[1.4] mb-2 font-semibold text-text-main group-hover:underline underline-offset-4 transition-all line-clamp-4 wrap-break-word"
                 >
                   {@html article.title}
                 </h3>

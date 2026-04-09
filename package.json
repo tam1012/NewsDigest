@@ -7,6 +7,8 @@
     "dev": "wrangler dev",
     "dev:fe": "cd fe && npm run dev",
     "cf:init": "node scripts/cf-init.mjs",
+    "fix:sources": "node scripts/fix-known-sources.mjs",
+    "fix:sources:remote": "node scripts/fix-known-sources.mjs --remote",
     "deploy": "node scripts/deploy.mjs",
     "deploy:fe": "node scripts/deploy-fe.mjs",
     "deploy:worker": "wrangler deploy"

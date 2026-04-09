@@ -63,7 +63,7 @@ Used to fetch latest videos from YouTube channels you subscribe to as sources.
 
 Used to fetch video transcripts so the AI can summarize YouTube content.
 
-1. Go to [youtube-transcript3 on RapidAPI](https://rapidapi.com/solid-api-solid-api-default/api/youtube-transcript3)
+1. Go to [yt-api on RapidAPI](https://rapidapi.com/ytjar/api/yt-api)
 2. Sign up / log in to RapidAPI
 3. Click **Subscribe** → choose the free tier (Basic)
 4. Copy your **X-RapidAPI-Key** from the code examples on the right panel
@@ -107,7 +107,7 @@ This deploys the Worker, builds the frontend with the correct API URL, and deplo
 | `AI_GATEWAY_URL` | [Cloudflare AI Gateway](https://dash.cloudflare.com) → AI → AI Gateway | Gateway URL for Gemini AI calls |
 | `AI_GATEWAY_TOKEN` | Same as above → gateway settings | Authorization token |
 | `YOUTUBE_API_KEY` | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) | Fetches latest videos from YouTube channels |
-| `RAPIDAPI_KEY` | [RapidAPI — youtube-transcript3](https://rapidapi.com/solid-api-solid-api-default/api/youtube-transcript3) | Fetches YouTube video transcripts |
+| `RAPIDAPI_KEY` | [RapidAPI — yt-api](https://rapidapi.com/ytjar/api/yt-api) | Fetches YouTube subtitles/transcripts |
 | `ADMIN_API_KEY` | Self-generated (`openssl rand -hex 32`) | Protects write endpoints (optional) |
 | `AI_GATEWAY_KEY_ALIASES` | Cloudflare AI Gateway → Provider aliases | BYOK key rotation (optional) |
 

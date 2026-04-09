@@ -81,7 +81,7 @@
 >
   <CardHeader class="pb-2">
     <div class="flex justify-between items-start gap-4">
-      <CardTitle class="text-lg leading-tight line-clamp-2">
+      <CardTitle class="text-lg leading-tight line-clamp-4">
         <a
           href={article.url}
           target="_blank"
