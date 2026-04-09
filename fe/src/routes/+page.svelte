@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick, onMount } from 'svelte'
+  import { tick, onMount, untrack } from 'svelte'
   import { browser } from '$app/environment'
   import { goto } from '$app/navigation'
   import { filters } from '$lib/stores/articles'
@@ -75,9 +75,11 @@
   }
 
   // Trigger on mount and when currentDate changes
+  // Only track data.currentDate — do NOT re-run when articles/loading change
   $effect(() => {
+    const date = data.currentDate
     if (browser) {
-      articleCache.loadDate(data.currentDate)
+      untrack(() => articleCache.loadDate(date))
     }
   })
 
@@ -110,7 +112,7 @@
       } else {
         lastKnownToday = currentTodayStr
         // Same day or user was viewing a past date → just refresh current view
-        articleCache.loadDate(data.currentDate)
+        articleCache.forceRefresh(data.currentDate)
       }
     }
 
@@ -177,11 +179,13 @@
   let refreshCooldown = $state(false)
   let prevIsToday = $state(false)
   $effect(() => {
-    if (isToday && !prevIsToday) {
+    const currentIsToday = isToday
+    const wasToday = untrack(() => prevIsToday)
+    if (currentIsToday && !wasToday) {
       refreshCooldown = true
       setTimeout(() => (refreshCooldown = false), 400)
     }
-    prevIsToday = isToday
+    untrack(() => { prevIsToday = currentIsToday })
   })
 
   let formattedDate = $derived.by(() => {
@@ -199,9 +203,9 @@
     const todayNow = new Date()
     const todayFormatted = `${todayNow.getFullYear()}-${String(todayNow.getMonth() + 1).padStart(2, '0')}-${String(todayNow.getDate()).padStart(2, '0')}`
     if (newDate === todayFormatted) {
-      goto('/', { invalidateAll: true })
+      goto('/')
     } else {
-      goto(`/?date=${newDate}`, { invalidateAll: true })
+      goto(`/?date=${newDate}`)
     }
   }
 
@@ -232,14 +236,17 @@
   let prevFilterKey = $state('')
   $effect(() => {
     const filterKey = `${$filters.sourceId}|${$filters.tag}|${$filters.minHot}`
-    if (filterKey !== prevFilterKey && prevFilterKey !== '') {
-      if (innerWidth >= 768 && filteredArticles.length > 0) {
-        selectedArticle = filteredArticles[0]
-      } else if (innerWidth >= 768) {
-        selectedArticle = null
-      }
+    const prev = untrack(() => prevFilterKey)
+    if (filterKey !== prev && prev !== '') {
+      untrack(() => {
+        if (innerWidth >= 768 && filteredArticles.length > 0) {
+          selectedArticle = filteredArticles[0]
+        } else if (innerWidth >= 768) {
+          selectedArticle = null
+        }
+      })
     }
-    prevFilterKey = filterKey
+    untrack(() => { prevFilterKey = filterKey })
   })
 
   let hasActiveFilter = $derived(!!$filters.sourceId || !!$filters.tag)
@@ -273,50 +280,57 @@
   // Effect to scroll to top when selectedArticle changes (desktop only)
   $effect(() => {
     const article = selectedArticle
-    if (article && !mobileMode) {
-      tick().then(() => {
-        const shouldScroll = article.id !== lastScrollInfo.articleId
-        if (shouldScroll) {
+    const isMobile = mobileMode
+    if (article && !isMobile) {
+      const prevId = untrack(() => lastScrollInfo.articleId)
+      if (article.id !== prevId) {
+        untrack(() => { lastScrollInfo = { articleId: article.id } })
+        tick().then(() => {
           const viewport = document.querySelectorAll(
             '[data-overlayscrollbars-viewport]',
           )[0] as HTMLElement | undefined
-
           if (viewport) {
             viewport.scrollTo({ top: 0, behavior: 'instant' })
           }
-          lastScrollInfo = { articleId: article.id }
-        }
-      })
+        })
+      }
     }
   })
 
   let currentDatasetId = $state('')
 
   $effect(() => {
-    // Whenever articles finish loading, pick an initial selection for desktop
-    if (!loading && data.currentDate !== currentDatasetId) {
-      currentDatasetId = data.currentDate
-      if (innerWidth >= 768) {
-        sideView = 'list'
-        if (filteredArticles.length > 0) {
-          selectedArticle = filteredArticles[0]
-        } else {
-          selectedArticle = null
+    // Track only loading and currentDate — avoid tracking filteredArticles directly
+    // to prevent re-running when article content changes
+    const isLoading = loading
+    const date = data.currentDate
+    if (!isLoading) {
+      untrack(() => {
+        if (date !== currentDatasetId) {
+          currentDatasetId = date
+          if (innerWidth >= 768) {
+            sideView = 'list'
+            if (filteredArticles.length > 0) {
+              selectedArticle = filteredArticles[0]
+            } else {
+              selectedArticle = null
+            }
+          } else {
+            sideView = 'list'
+            selectedArticle = null
+          }
+          // Reset scroll for both aside (VP1) and main (VP0) when date changes (desktop only)
+          if (!mobileMode) {
+            tick().then(() => {
+              const viewports = document.querySelectorAll(
+                '[data-overlayscrollbars-viewport]',
+              )
+              viewports[0]?.scrollTo({ top: 0, behavior: 'instant' })
+              viewports[1]?.scrollTo({ top: 0, behavior: 'instant' })
+            })
+          }
         }
-      } else {
-        sideView = 'list'
-        selectedArticle = null
-      }
-      // Reset scroll for both aside (VP1) and main (VP0) when date changes (desktop only)
-      if (!mobileMode) {
-        tick().then(() => {
-          const viewports = document.querySelectorAll(
-            '[data-overlayscrollbars-viewport]',
-          )
-          viewports[0]?.scrollTo({ top: 0, behavior: 'instant' })
-          viewports[1]?.scrollTo({ top: 0, behavior: 'instant' })
-        })
-      }
+      })
     }
   })
 

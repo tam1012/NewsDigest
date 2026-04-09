@@ -946,10 +946,10 @@ function isLikelyArticlePage(pageUrl: string, html: string): boolean {
     const segments = path.split('/').filter(Boolean);
 
     if (segments.length < 2) return false;
-    if (/(^|\/)( category|categories|tag|tags|author|authors|topics|topic)(\/|$)/.test(path)) return false;
+    if (/(^|\/)(category|categories|tag|tags|author|authors|topics|topic)(\/|$)/.test(path)) return false;
     if (/\/page\/\d+\/?$/.test(path)) return false;
     // Loại trừ trang utility không phải bài viết
-    if (/(^|\/)(docs|documentation|help|faq|about|careers|privacy|terms|contact|search|pricing|changelog)(\/ |$)/.test(path)) return false;
+    if (/(^|\/)(docs|documentation|help|faq|about|careers|privacy|terms|contact|search|pricing|changelog)(\/|$)/.test(path)) return false;
 
     const compact = html.replace(/\s+/g, ' ').slice(0, 200000).toLowerCase();
 
