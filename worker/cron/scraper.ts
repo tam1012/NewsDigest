@@ -1,6 +1,7 @@
 import { XMLParser } from 'fast-xml-parser';
-import { Env, Source, ArticleInput } from '../types';
-import { getProfile } from './site-profiles';
+import { Env, Source, ArticleInput, ScraperProfileConfig, ListingProfileConfig } from '../types';
+import { resolveStaticProfile, SiteProfile } from './site-profiles';
+import { generateListingProfile, generateScraperProfile } from '../ai/scraper-profile';
 
 /** Chuẩn hoá mọi định dạng ngày (RFC 2822, ISO 8601…) về ISO 8601 UTC. */
 function normalizeDate(raw?: string | null): string {
@@ -125,7 +126,7 @@ export async function fetchSource(source: Source, env: Env): Promise<ArticleInpu
     return fetchGitHubTrending(source);
   } else {
     // Basic fallback for HTML or unknown
-    return fetchUnknown(source);
+    return fetchUnknown(source, env);
   }
 }
 
@@ -428,7 +429,222 @@ async function fetchGitHubTrending(source: Source): Promise<ArticleInput[]> {
   return results.filter(r => r.url && r.title).slice(0, 15);
 }
 
-async function fetchUnknown(source: Source): Promise<ArticleInput[]> {
+function normalizeListingProfile(profile: ListingProfileConfig): {
+  linkSelectors: string[];
+  removeSelectors: string[];
+} {
+  return {
+    linkSelectors: profile.linkSelectors,
+    removeSelectors: profile.removeSelectors,
+  };
+}
+
+function scoreListingHref(href: string, sourceHost: string): number {
+  if (sourceHost === 'vercel.com' && href.includes('/blog/')) return 100;
+  return href.startsWith('/') ? 60 : 40;
+}
+
+function buildListingArticles(
+  candidates: Map<string, { title: string; score: number }>
+): ArticleInput[] {
+  return [...candidates.entries()]
+    .sort((a, b) => b[1].score - a[1].score || b[1].title.length - a[1].title.length)
+    .slice(0, 20)
+    .map(([url, value]) => ({
+      url,
+      title: value.title,
+      published_at: new Date().toISOString(),
+    }));
+}
+
+function isLikelyListingUrl(pageUrl: string): boolean {
+  try {
+    const path = new URL(pageUrl).pathname.toLowerCase().replace(/\/+$/, '') || '/';
+    if (path === '/' || path === '/blog' || path === '/news' || path === '/stories') return true;
+    if (/(^|\/)(category|categories|tag|tags|author|authors|topics|topic)(\/|$)/.test(path)) return true;
+    if (/\/page\/\d+\/?$/.test(path)) return true;
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+function validateStoredListingProfile(config: any): ListingProfileConfig | null {
+  const linkSelectors = Array.isArray(config?.linkSelectors)
+    ? config.linkSelectors.filter((v: unknown) => typeof v === 'string' && v.trim()).slice(0, 10)
+    : [];
+  if (linkSelectors.length === 0) return null;
+
+  const removeSelectors = Array.isArray(config?.removeSelectors)
+    ? config.removeSelectors.filter((v: unknown) => typeof v === 'string' && v.trim()).slice(0, 20)
+    : [];
+
+  const confidence = Number.isFinite(Number(config?.confidence))
+    ? Math.max(0, Math.min(1, Number(config.confidence)))
+    : 0.5;
+  const sampleUrl = typeof config?.sampleUrl === 'string' ? config.sampleUrl : '';
+  const updatedAt = typeof config?.updatedAt === 'string' ? config.updatedAt : new Date().toISOString();
+
+  return {
+    linkSelectors,
+    removeSelectors,
+    confidence,
+    source: 'ai',
+    sampleUrl,
+    updatedAt,
+  };
+}
+
+async function loadStoredListingProfile(domain: string, env: Env): Promise<ListingProfileConfig | null> {
+  const { results } = await env.DB.prepare(
+    'SELECT config_json FROM scraper_configs WHERE domain = ? AND mode = ? LIMIT 1'
+  ).bind(domain, 'listing').all<{ config_json: string }>();
+
+  if (!results || results.length === 0) return null;
+  const row = results[0];
+  if (!row?.config_json) return null;
+
+  try {
+    return validateStoredListingProfile(JSON.parse(row.config_json));
+  } catch {
+    return null;
+  }
+}
+
+async function saveListingProfile(domain: string, profile: ListingProfileConfig, env: Env): Promise<void> {
+  const now = new Date().toISOString();
+  const payload = {
+    linkSelectors: profile.linkSelectors,
+    removeSelectors: profile.removeSelectors,
+    confidence: profile.confidence ?? 0.5,
+    source: 'ai' as const,
+    sampleUrl: profile.sampleUrl,
+    updatedAt: now,
+  };
+
+  await env.DB.prepare(
+    `INSERT INTO scraper_configs (domain, mode, config_json, learned_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(domain, mode) DO UPDATE SET
+       config_json = excluded.config_json,
+       learned_at = excluded.learned_at`
+  ).bind(domain, 'listing', JSON.stringify(payload), now).run();
+}
+
+function pushListingCandidate(
+  candidates: Map<string, { title: string; score: number }>,
+  rawHref: string,
+  rawTitle: string,
+  score: number,
+  finalUrl: string,
+  sourceHost: string
+) {
+  const href = (rawHref || '').trim();
+  if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('javascript:')) return;
+
+  let normalized: URL;
+  try {
+    normalized = new URL(href, finalUrl);
+  } catch {
+    return;
+  }
+
+  const hostname = normalized.hostname.replace(/^www\./, '').toLowerCase();
+  if (!(hostname === sourceHost || hostname.endsWith(`.${sourceHost}`) || sourceHost.endsWith(`.${hostname}`))) return;
+
+  normalized.hash = '';
+  normalized.search = '';
+  const pathname = normalized.pathname.replace(/\/+$/, '') || '/';
+
+  let isArticle = isLikelyArticlePath(pathname);
+  if (sourceHost === 'vercel.com') {
+    isArticle = isLikelyVercelBlogArticle(pathname);
+  }
+  if (!isArticle) return;
+
+  const title = cleanText(rawTitle) || slugToTitle(pathname);
+  if (!title) return;
+
+  const key = normalized.toString();
+  const prev = candidates.get(key);
+  if (!prev || score > prev.score || title.length > prev.title.length) {
+    candidates.set(key, { title, score });
+  }
+}
+
+async function extractListingWithSelectorSet(
+  html: string,
+  selectors: { linkSelectors: string[]; removeSelectors: string[] },
+  finalUrl: string,
+  sourceHost: string
+): Promise<Map<string, { title: string; score: number }>> {
+  const candidates = new Map<string, { title: string; score: number }>();
+  let currentHref = '';
+  let currentText = '';
+
+  let rewriter = new HTMLRewriter();
+  const removeSelector = selectors.removeSelectors.join(', ');
+  if (removeSelector) {
+    rewriter = rewriter.on(removeSelector, {
+      element(el: Element) {
+        el.remove();
+      },
+    });
+  }
+
+  const linkSelector = selectors.linkSelectors.join(', ');
+  if (!linkSelector) return candidates;
+
+  rewriter = rewriter.on(linkSelector, {
+    element(el: Element) {
+      const href = el.getAttribute('href') || '';
+      currentHref = href;
+      currentText = '';
+      el.onEndTag(() => {
+        pushListingCandidate(
+          candidates,
+          currentHref,
+          currentText,
+          scoreListingHref(currentHref, sourceHost),
+          finalUrl,
+          sourceHost
+        );
+        currentHref = '';
+        currentText = '';
+      });
+    },
+    text(text: Text) {
+      currentText += ` ${text.text}`;
+    },
+  });
+
+  await rewriter.transform(new Response(html)).text();
+  return candidates;
+}
+
+function defaultListingSelectors(sourceHost: string): { linkSelectors: string[]; removeSelectors: string[] } {
+  if (sourceHost === 'vercel.com') {
+    return {
+      linkSelectors: ['a[href^="/blog/"]', 'a[href*="://vercel.com/blog/"]'],
+      removeSelectors: [],
+    };
+  }
+  return {
+    linkSelectors: ['a[href]'],
+    removeSelectors: [],
+  };
+}
+
+function shouldAcceptListingCandidate(
+  candidate: ArticleInput[],
+  baseline: ArticleInput[]
+): boolean {
+  if (candidate.length < 3) return false;
+  if (baseline.length === 0) return true;
+  return candidate.length >= Math.max(3, Math.floor(baseline.length * 0.5));
+}
+
+async function fetchUnknown(source: Source, env: Env): Promise<ArticleInput[]> {
   const response = await fetch(source.url, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
@@ -447,95 +663,321 @@ async function fetchUnknown(source: Source): Promise<ArticleInput[]> {
   const finalUrl = response.url || source.url;
   const pageHost = new URL(finalUrl).hostname.replace(/^www\./, '').toLowerCase();
   const sourceHost = new URL(source.url).hostname.replace(/^www\./, '').toLowerCase();
+  const html = await response.text();
+  const learnedProfile = await loadStoredListingProfile(pageHost, env);
 
-  const candidates = new Map<string, { title: string; score: number }>();
+  let activeSelectors = defaultListingSelectors(sourceHost);
+  let profileUsed = 'heuristic_default';
+  if (learnedProfile) {
+    activeSelectors = normalizeListingProfile(learnedProfile);
+    profileUsed = 'd1_listing';
+    console.log(`[scraper] listing_profile_hit domain=${pageHost} source=d1`);
+  } else {
+    console.log(`[scraper] listing_profile_miss domain=${pageHost}`);
+  }
 
-  function pushCandidate(rawHref: string, rawTitle: string, score: number) {
-    const href = (rawHref || '').trim();
-    if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('javascript:')) return;
+  let candidates = await extractListingWithSelectorSet(html, activeSelectors, finalUrl, sourceHost);
+  let result = buildListingArticles(candidates);
 
-    let normalized: URL;
-    try {
-      normalized = new URL(href, finalUrl);
-    } catch {
-      return;
-    }
-
-    const hostname = normalized.hostname.replace(/^www\./, '').toLowerCase();
-    if (!(hostname === sourceHost || hostname.endsWith(`.${sourceHost}`) || sourceHost.endsWith(`.${hostname}`))) return;
-
-    normalized.hash = '';
-    normalized.search = '';
-    const pathname = normalized.pathname.replace(/\/+$/, '') || '/';
-
-    let isArticle = isLikelyArticlePath(pathname);
-    if (sourceHost === 'vercel.com') {
-      isArticle = isLikelyVercelBlogArticle(pathname);
-    }
-    if (!isArticle) return;
-
-    const title = cleanText(rawTitle) || slugToTitle(pathname);
-    if (!title) return;
-
-    const key = normalized.toString();
-    const prev = candidates.get(key);
-    if (!prev || score > prev.score || title.length > prev.title.length) {
-      candidates.set(key, { title, score });
+  if (learnedProfile && result.length < 3) {
+    const fallbackCandidates = await extractListingWithSelectorSet(
+      html,
+      defaultListingSelectors(sourceHost),
+      finalUrl,
+      sourceHost
+    );
+    const fallbackResult = buildListingArticles(fallbackCandidates);
+    if (fallbackResult.length > result.length) {
+      result = fallbackResult;
+      profileUsed = 'fallback_heuristic';
+      console.log(`[scraper] fallback_used domain=${pageHost} reason=weak_listing_profile`);
     }
   }
 
-  let currentHref = '';
-  let currentText = '';
+  if (!learnedProfile && isLikelyListingUrl(finalUrl)) {
+    const listingProfile = await generateListingProfile(pageHost, finalUrl, sanitizeHtmlForAi(html), env);
+    if (listingProfile) {
+      const learnedCandidates = await extractListingWithSelectorSet(
+        html,
+        normalizeListingProfile(listingProfile),
+        finalUrl,
+        sourceHost
+      );
+      const learnedResult = buildListingArticles(learnedCandidates);
+      if (shouldAcceptListingCandidate(learnedResult, result)) {
+        await saveListingProfile(pageHost, listingProfile, env);
+        console.log(
+          `[scraper] listing_profile_learned domain=${pageHost} confidence=${(listingProfile.confidence ?? 0).toFixed(2)} count=${learnedResult.length}`
+        );
+        if (learnedResult.length >= result.length) {
+          result = learnedResult;
+          profileUsed = 'learned_now';
+        } else {
+          console.log(`[scraper] fallback_used domain=${pageHost} reason=listing_baseline_better`);
+        }
+      } else {
+        console.log(`[scraper] listing_profile_rejected domain=${pageHost} reason=quality_gate`);
+      }
+    }
+  } else if (!learnedProfile) {
+    console.log(`[scraper] listing_profile_learning_skipped domain=${pageHost} reason=non_listing_url`);
+  }
 
-  const selector = sourceHost === 'vercel.com'
-    ? 'a[href^="/blog/"], a[href*="://vercel.com/blog/"]'
-    : 'a[href]';
+  console.log(
+    `[scraper] HTML ${pageHost}: extracted ${result.length} listing items from ${source.url} profile=${profileUsed}`
+  );
+  return result;
+}
 
-  const rewriter = new HTMLRewriter()
-    .on(selector, {
+interface ExtractResult {
+  text: string;
+  paragraphs: number;
+  anyContentSelectorMatched: boolean;
+}
+
+const MAX_CONTENT_CHARS = 25000;
+
+
+function normalizeProfile(profile: ScraperProfileConfig): SiteProfile {
+  return {
+    contentSelectors: profile.contentSelectors,
+    removeSelectors: profile.removeSelectors,
+    minLength: profile.minLength ?? 40,
+  };
+}
+
+function sanitizeHtmlForAi(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec)));
+}
+
+function isLikelyNoisyContent(text: string): boolean {
+  if (!text) return true;
+  const lower = text.toLowerCase();
+  const noiseMarkers = [
+    'cookie',
+    'privacy policy',
+    'subscribe',
+    'advertisement',
+    'all rights reserved',
+    'sign in',
+    'log in',
+    'newsletter',
+  ];
+  let hits = 0;
+  for (const marker of noiseMarkers) {
+    if (lower.includes(marker)) hits++;
+  }
+  return hits >= 4;
+}
+
+async function extractFromHtmlWithProfile(html: string, profile: SiteProfile): Promise<ExtractResult> {
+  const minLen = profile.minLength ?? 40;
+  const paragraphs: string[] = [];
+  let currentParagraph = '';
+  let totalLen = 0;
+  let contentDepth = 0;
+  let anyContentSelectorMatched = false;
+
+  function flushParagraph() {
+    if (totalLen >= MAX_CONTENT_CHARS) return;
+    if (currentParagraph.trim()) {
+      const clean = decodeEntities(currentParagraph.trim());
+      if (clean.length >= minLen) {
+        paragraphs.push(clean);
+        totalLen += clean.length;
+      }
+    }
+    currentParagraph = '';
+  }
+
+  let rewriter = new HTMLRewriter();
+  const removeSelector = profile.removeSelectors.join(', ');
+  if (removeSelector) {
+    rewriter = rewriter.on(removeSelector, {
       element(el: Element) {
-        const href = el.getAttribute('href') || '';
-        currentHref = href;
-        currentText = '';
-        el.onEndTag(() => {
-          const score = sourceHost === 'vercel.com' ? 100 : (currentHref.startsWith('/') ? 60 : 40);
-          pushCandidate(currentHref, currentText, score);
-          currentHref = '';
-          currentText = '';
-        });
-      },
-      text(text: Text) {
-        currentText += ` ${text.text}`;
+        el.remove();
       },
     });
+  }
 
-  await rewriter.transform(response).text();
+  const contentSelector = profile.contentSelectors.join(', ');
+  rewriter = rewriter.on(contentSelector, {
+    element(el: Element) {
+      contentDepth++;
+      anyContentSelectorMatched = true;
+      flushParagraph();
+      el.onEndTag(() => {
+        flushParagraph();
+        contentDepth = Math.max(0, contentDepth - 1);
+      });
+    },
+  });
 
-  const result = [...candidates.entries()]
-    .sort((a, b) => b[1].score - a[1].score || b[1].title.length - a[1].title.length)
-    .slice(0, 20)
-    .map(([url, value]) => ({
-      url,
-      title: value.title,
-      published_at: new Date().toISOString(),
-    }));
+  rewriter = rewriter.on('p, h1, h2, h3, h4, h5, h6, li, blockquote, figcaption, pre, div, section, article', {
+    element() {
+      flushParagraph();
+    },
+  });
 
-  console.log(`[scraper] HTML ${pageHost}: extracted ${result.length} listing items from ${source.url}`);
-  return result;
+  rewriter = rewriter.on('p, h1, h2, h3, h4, h5, h6, li, blockquote, figcaption, pre, td, th, span, a, em, strong, b, i, code', {
+    text(text: Text) {
+      if (totalLen >= MAX_CONTENT_CHARS) return;
+      if (contentDepth <= 0) return;
+      const t = text.text.trim();
+      if (t) currentParagraph += ' ' + t;
+    },
+  });
+
+  await rewriter.transform(new Response(html)).text();
+  flushParagraph();
+
+  if (!anyContentSelectorMatched && paragraphs.length === 0) {
+    return { text: '', paragraphs: 0, anyContentSelectorMatched: false };
+  }
+
+  const text = paragraphs
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, MAX_CONTENT_CHARS);
+
+  return { text, paragraphs: paragraphs.length, anyContentSelectorMatched };
+}
+
+function validateStoredProfile(config: any): ScraperProfileConfig | null {
+  const contentSelectors = Array.isArray(config?.contentSelectors)
+    ? config.contentSelectors.filter((v: unknown) => typeof v === 'string' && v.trim()).slice(0, 8)
+    : [];
+  if (contentSelectors.length === 0) return null;
+
+  const removeSelectors = Array.isArray(config?.removeSelectors)
+    ? config.removeSelectors.filter((v: unknown) => typeof v === 'string' && v.trim()).slice(0, 20)
+    : [];
+
+  const minLength = Number.isFinite(Number(config?.minLength))
+    ? Math.max(20, Math.min(300, Number(config.minLength)))
+    : 40;
+  const confidence = Number.isFinite(Number(config?.confidence))
+    ? Math.max(0, Math.min(1, Number(config.confidence)))
+    : 0.5;
+  const sampleUrl = typeof config?.sampleUrl === 'string' ? config.sampleUrl : '';
+  const updatedAt = typeof config?.updatedAt === 'string' ? config.updatedAt : new Date().toISOString();
+
+  return {
+    contentSelectors,
+    removeSelectors,
+    minLength,
+    confidence,
+    source: 'ai',
+    sampleUrl,
+    updatedAt,
+  };
+}
+
+async function loadStoredProfile(domain: string, env: Env): Promise<ScraperProfileConfig | null> {
+  const { results } = await env.DB.prepare(
+    'SELECT config_json FROM scraper_configs WHERE domain = ? AND mode = ? LIMIT 1'
+  ).bind(domain, 'html').all<{ config_json: string }>();
+
+  if (!results || results.length === 0) return null;
+  const row = results[0];
+  if (!row?.config_json) return null;
+
+  try {
+    return validateStoredProfile(JSON.parse(row.config_json));
+  } catch {
+    return null;
+  }
+}
+
+async function saveProfile(domain: string, profile: ScraperProfileConfig, env: Env): Promise<void> {
+  const now = new Date().toISOString();
+  const payload = {
+    contentSelectors: profile.contentSelectors,
+    removeSelectors: profile.removeSelectors,
+    minLength: profile.minLength ?? 40,
+    confidence: profile.confidence ?? 0.5,
+    source: 'ai' as const,
+    sampleUrl: profile.sampleUrl,
+    updatedAt: now,
+  };
+
+  await env.DB.prepare(
+    `INSERT INTO scraper_configs (domain, mode, config_json, learned_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(domain, mode) DO UPDATE SET
+       config_json = excluded.config_json,
+       learned_at = excluded.learned_at`
+  ).bind(domain, 'html', JSON.stringify(payload), now).run();
+}
+
+function shouldAcceptCandidate(candidate: ExtractResult, baseline: ExtractResult, minLength = 40): boolean {
+  if (!candidate.text) return false;
+  if (isLikelyNoisyContent(candidate.text)) return false;
+
+  const minChars = Math.max(240, minLength * 6);
+  if (candidate.text.length < minChars) return false;
+
+  if (baseline.text.length === 0) return true;
+  return candidate.text.length >= Math.floor(baseline.text.length * 0.85);
+}
+
+function isLikelyArticlePage(pageUrl: string, html: string): boolean {
+  try {
+    const u = new URL(pageUrl);
+    const path = u.pathname.toLowerCase().replace(/\/+$/, '');
+    const segments = path.split('/').filter(Boolean);
+
+    if (segments.length < 2) return false;
+    if (/(^|\/)( category|categories|tag|tags|author|authors|topics|topic)(\/|$)/.test(path)) return false;
+    if (/\/page\/\d+\/?$/.test(path)) return false;
+    // Loại trừ trang utility không phải bài viết
+    if (/(^|\/)(docs|documentation|help|faq|about|careers|privacy|terms|contact|search|pricing|changelog)(\/ |$)/.test(path)) return false;
+
+    const compact = html.replace(/\s+/g, ' ').slice(0, 200000).toLowerCase();
+
+    // Schema.org — tín hiệu mạnh nhất
+    if (compact.includes('"@type":"blogposting"') || compact.includes('"@type": "blogposting"')) return true;
+    if (compact.includes('"@type":"newsarticle"') || compact.includes('"@type": "newsarticle"')) return true;
+
+    // Open Graph article type
+    if (/property=["']og:type["'][^>]*content=["']article["']/i.test(compact) ||
+        /content=["']article["'][^>]*property=["']og:type["']/i.test(compact)) return true;
+
+    // Có thẻ <article> với nội dung thực
+    if (/<article[^>]*>[\s\S]{200,}<\/article>/i.test(html)) return true;
+
+    // Không có tín hiệu mạnh → không kích hoạt AI
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 /**
  * Fetch nội dung bài viết từ URL gốc.
- * Dùng HTMLRewriter + SiteProfile để extract text chính xác theo từng site.
- * contentSelectors dùng để scope vùng content (chỉ lấy text bên trong).
- * removeSelectors dùng để xoá noise trước khi extract.
- * Giới hạn 25000 ký tự.
+ * Ưu tiên profile đã học trong D1, fallback sang hardcoded profile.
+ * Domain mới sẽ được AI học profile ngay lần scrape đầu tiên.
  */
-export async function extractArticleContent(url: string): Promise<string> {
+export async function extractArticleContent(url: string, env: Env): Promise<string> {
   try {
-    const profile = getProfile(url);
-    const minLen = profile.minLength ?? 40;
-
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
@@ -550,110 +992,67 @@ export async function extractArticleContent(url: string): Promise<string> {
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('text/html')) return '';
 
-    const paragraphs: string[] = [];
-    let currentParagraph = '';
-    let totalLen = 0;
-    const MAX_CHARS = 25000;
+    const finalUrl = response.url || url;
+    const domain = new URL(finalUrl).hostname.replace(/^www\./, '').toLowerCase();
+    const html = await response.text();
+    if (!html) return '';
 
-    // Track whether we're inside a content container
-    // depth > 0 means we're inside at least one matching content selector
-    let contentDepth = 0;
-    // If no contentSelector matched at all, we'll fallback to capturing everything
-    let anyContentSelectorMatched = false;
+    const staticProfile = resolveStaticProfile(finalUrl);
+    const learnedProfile = await loadStoredProfile(domain, env);
 
-    function decodeEntities(s: string): string {
-      return s
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
-        .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec)));
+    let activeProfile: SiteProfile = staticProfile;
+    if (learnedProfile) {
+      activeProfile = normalizeProfile(learnedProfile);
+      console.log(`[scraper] profile_hit domain=${domain} source=d1`);
+    } else {
+      console.log(`[scraper] profile_miss domain=${domain} fallback=${staticProfile.matchedKey}`);
     }
 
-    function flushParagraph() {
-      if (totalLen >= MAX_CHARS) return;
-      if (currentParagraph.trim()) {
-        const clean = decodeEntities(currentParagraph.trim());
-        if (clean.length >= minLen) {
-          paragraphs.push(clean);
-          totalLen += clean.length;
+    let chosen = await extractFromHtmlWithProfile(html, activeProfile);
+    let usedProfile = learnedProfile ? 'd1' : 'static';
+
+    // Fallback an toàn nếu profile D1 đã tồn tại nhưng fail ở request hiện tại
+    if (learnedProfile && chosen.text.length === 0) {
+      const fallback = await extractFromHtmlWithProfile(html, staticProfile);
+      if (fallback.text.length > 0) {
+        chosen = fallback;
+        usedProfile = 'fallback_static';
+        console.log(`[scraper] fallback_used domain=${domain} reason=empty_d1_result`);
+      }
+    }
+
+    // Domain chưa có profile D1 -> học profile từ lần scrape đầu
+    if (!learnedProfile && isLikelyArticlePage(finalUrl, html)) {
+      const aiProfile = await generateScraperProfile(domain, finalUrl, sanitizeHtmlForAi(html), env);
+      if (aiProfile) {
+        const candidate = await extractFromHtmlWithProfile(html, normalizeProfile(aiProfile));
+        if (shouldAcceptCandidate(candidate, chosen, aiProfile.minLength ?? 40)) {
+          await saveProfile(domain, aiProfile, env);
+          console.log(
+            `[scraper] profile_learned domain=${domain} confidence=${(aiProfile.confidence ?? 0).toFixed(2)} chars=${candidate.text.length}`
+          );
+
+          if (candidate.text.length >= chosen.text.length) {
+            chosen = candidate;
+            usedProfile = 'learned_now';
+          } else {
+            console.log(`[scraper] fallback_used domain=${domain} reason=baseline_better`);
+          }
+        } else {
+          console.log(`[scraper] profile_rejected domain=${domain} reason=quality_gate`);
         }
       }
-      currentParagraph = '';
+    } else if (!learnedProfile) {
+      console.log(`[scraper] profile_learning_skipped domain=${domain} reason=non_article_url`);
     }
 
-    // Build rewriter
-    let rewriter = new HTMLRewriter();
-
-    // 1) Remove noise elements from profile
-    const removeSelector = profile.removeSelectors.join(', ');
-    if (removeSelector) {
-      rewriter = rewriter.on(removeSelector, {
-        element(el: Element) { el.remove(); }
-      });
-    }
-
-    // 2) Track content scope using contentSelectors
-    //    Enter → depth++, Leave (end tag) → depth--
-    const contentSelector = profile.contentSelectors.join(', ');
-    rewriter = rewriter.on(contentSelector, {
-      element(el: Element) {
-        contentDepth++;
-        anyContentSelectorMatched = true;
-        // Also flush paragraph at container boundary
-        flushParagraph();
-
-        el.onEndTag(() => {
-          flushParagraph();
-          contentDepth--;
-        });
-      }
-    });
-
-    // 3) Paragraph boundary detection
-    rewriter = rewriter.on('p, h1, h2, h3, h4, h5, h6, li, blockquote, figcaption, pre, div, section, article', {
-      element(_el: Element) {
-        flushParagraph();
-      }
-    });
-
-    // 4) Text extraction — only capture if inside content scope
-    rewriter = rewriter.on('p, h1, h2, h3, h4, h5, h6, li, blockquote, figcaption, pre, td, th, span, a, em, strong, b, i, code', {
-      text(text: Text) {
-        if (totalLen >= MAX_CHARS) return;
-        // Only capture text if we're inside a content container
-        if (contentDepth <= 0) return;
-        const t = text.text.trim();
-        if (t) {
-          currentParagraph += ' ' + t;
-        }
-      }
-    });
-
-    await rewriter.transform(response).text();
-
-    // Flush last paragraph
-    flushParagraph();
-
-    // If no content selector matched at all, it means the page structure
-    // didn't match any profile selector. Return empty — the generic approach
-    // would just capture garbage anyway.
-    if (!anyContentSelectorMatched && paragraphs.length === 0) {
-      return '';
-    }
-
-    const result = paragraphs
-      .join('\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
-      .slice(0, MAX_CHARS);
-
-    console.log(`[scraper] ${profile.hostname}: extracted ${result.length} chars (${paragraphs.length} paragraphs)`);
-    return result;
-  } catch {
+    if (!chosen.text) return '';
+    console.log(
+      `[scraper] ${domain}: extracted ${chosen.text.length} chars (${chosen.paragraphs} paragraphs) profile=${usedProfile}`
+    );
+    return chosen.text;
+  } catch (err: any) {
+    console.log(`[scraper] extract_error ${url}: ${err.message}`);
     return '';
   }
 }

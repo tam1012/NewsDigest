@@ -105,13 +105,23 @@ export const SITE_PROFILES: Record<string, SiteProfile> = {
   },
 };
 
-export function getProfile(url: string): SiteProfile & { hostname: string } {
+export function resolveStaticProfile(url: string): SiteProfile & { hostname: string; matchedKey: string } {
   try {
     const hostname = new URL(url).hostname.replace(/^www\./, '');
     const key = Object.keys(SITE_PROFILES).find(k => hostname === k || hostname.endsWith('.' + k));
     const profile = key ? SITE_PROFILES[key] : SITE_PROFILES['_default'];
-    return { ...profile, hostname };
+    return { ...profile, hostname, matchedKey: key || '_default' };
   } catch {
-    return { ...SITE_PROFILES['_default'], hostname: 'unknown' };
+    return { ...SITE_PROFILES['_default'], hostname: 'unknown', matchedKey: '_default' };
   }
+}
+
+export function getProfile(url: string): SiteProfile & { hostname: string } {
+  const resolved = resolveStaticProfile(url);
+  return {
+    contentSelectors: resolved.contentSelectors,
+    removeSelectors: resolved.removeSelectors,
+    minLength: resolved.minLength,
+    hostname: resolved.hostname,
+  };
 }

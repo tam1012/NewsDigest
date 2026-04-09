@@ -12,10 +12,12 @@ CREATE TABLE IF NOT EXISTS sources (
 
 -- Cấu hình scraper đã học (cache selector theo domain)
 CREATE TABLE IF NOT EXISTS scraper_configs (
-  domain      TEXT PRIMARY KEY,
-  mode        TEXT NOT NULL,            -- 'rss' | 'html' | 'gemini'
-  config_json TEXT NOT NULL,            -- JSON: { rssUrl?, selectors? }
-  learned_at  TEXT NOT NULL
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  domain      TEXT NOT NULL,
+  mode        TEXT NOT NULL,            -- 'html' | 'listing'
+  config_json TEXT NOT NULL,
+  learned_at  TEXT NOT NULL,
+  UNIQUE(domain, mode)
 );
 
 -- Bài viết đã thu thập
