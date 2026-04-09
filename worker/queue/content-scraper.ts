@@ -302,7 +302,7 @@ export async function handleContentQueue(
         content = await fetchGitHubReadme(url);
       } else {
         // --- Other sites → HTMLRewriter ---
-        content = await extractArticleContent(url);
+        content = await extractArticleContent(url, env);
       }
 
       if (content) {

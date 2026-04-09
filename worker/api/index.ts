@@ -356,7 +356,7 @@ app.post('/api/articles/enrich', async (c) => {
                 return { id: art.id, success: false, chars: 0, note: 'HN text post with no content' };
             }
 
-            const content = await extractArticleContent(fetchUrl);
+            const content = await extractArticleContent(fetchUrl, c.env);
             if (content && content.length > 50) {
                 await c.env.DB.prepare('UPDATE articles SET content = ? WHERE id = ?')
                     .bind(content, art.id).run();

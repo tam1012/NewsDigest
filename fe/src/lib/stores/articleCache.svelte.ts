@@ -180,6 +180,9 @@ function mergeArticles(
 
 // ── Main public functions ────────────────────────────
 
+// Guard: track the last loadDate call to prevent concurrent duplicate loads
+let _loadCallId = 0;
+
 /**
  * Load articles for a given date.
  * 
@@ -191,6 +194,8 @@ function mergeArticles(
  * - If this is "today" or if it's a return visit, also do a refresh check
  */
 async function loadDate(date: string) {
+  // Increment call ID so previous in-flight fetches bail out
+  const callId = ++_loadCallId;
   _currentDate = date;
   const isToday = date === getTodayStr();
 
@@ -257,8 +262,8 @@ async function loadDate(date: string) {
       fetchDigest(date),
     ]);
 
-    // Bail if user navigated away during fetch
-    if (_currentDate !== date) return;
+    // Bail if a newer loadDate call was made while we were fetching
+    if (_loadCallId !== callId) return;
 
     // Sort by published_at DESC immediately to match backgroundLoadRemaining order
     // and prevent visible reorder when remaining articles load
@@ -292,6 +297,7 @@ async function loadDate(date: string) {
       saveDigestToStorage(date, digestResult);
     }
   } catch (e) {
+    if (_loadCallId !== callId) return; // stale call, ignore error
     console.error('Failed to fetch articles', e);
     _articles = [];
     _digest = null;

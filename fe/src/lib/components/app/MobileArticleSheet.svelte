@@ -235,6 +235,13 @@
     if (!isDragging) pendingBodyDrag = false
   }
 
+  // Scroll to top when article changes
+  $effect(() => {
+    if (selectedArticle && drawerBody) {
+      drawerBody.scrollTop = 0
+    }
+  })
+
   $effect(() => {
     if (open) {
       syncOpenStyles()
