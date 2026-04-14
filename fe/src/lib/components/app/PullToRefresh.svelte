@@ -16,31 +16,30 @@
 
   let refreshing = $state(false)
 
-  // Plain JS — no reactivity overhead on touchmove
   let pulling = false
   let startY = 0
   let pullDistance = 0
 
   let indicatorEl: HTMLDivElement | undefined = $state()
-  let iconEl: HTMLDivElement | undefined = $state()
+  let circleEl: SVGCircleElement | undefined = $state()
+  let ringEl: SVGSVGElement | undefined = $state()
+
+  const RADIUS = 18
+  const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 
   function applyResistance(distance: number): number {
     return Math.min(distance * 0.4, 100)
   }
 
   function updateIndicator(dist: number) {
-    if (!indicatorEl || !iconEl) return
+    if (!indicatorEl || !circleEl) return
     const progress = Math.min(dist / threshold, 1)
     indicatorEl.style.opacity = `${progress}`
-    indicatorEl.style.transform = `translateY(${dist - 28}px)`
+    indicatorEl.style.transform = `translateY(${dist - 24}px)`
 
-    if (dist >= threshold) {
-      iconEl.style.transform = 'rotate(180deg)'
-      iconEl.style.color = 'var(--color-text-main)'
-    } else {
-      iconEl.style.transform = 'rotate(0deg)'
-      iconEl.style.color = 'var(--color-text-secondary)'
-    }
+    // Stroke progress
+    const offset = CIRCUMFERENCE * (1 - progress)
+    circleEl.style.strokeDashoffset = `${offset}`
   }
 
   function hideIndicator(animate: boolean) {
@@ -49,10 +48,12 @@
       indicatorEl.style.transition = 'opacity 0.25s ease, transform 0.25s ease'
     }
     indicatorEl.style.opacity = '0'
-    indicatorEl.style.transform = 'translateY(-28px)'
+    indicatorEl.style.transform = 'translateY(-24px)'
     if (animate) {
       setTimeout(() => {
         if (indicatorEl) indicatorEl.style.transition = 'none'
+        if (circleEl) circleEl.style.strokeDashoffset = `${CIRCUMFERENCE}`
+        if (ringEl) ringEl.classList.remove('ptr-spinning')
       }, 270)
     }
   }
@@ -64,6 +65,7 @@
     pulling = true
     pullDistance = 0
     if (indicatorEl) indicatorEl.style.transition = 'none'
+    if (ringEl) ringEl.classList.remove('ptr-spinning')
   }
 
   function handleTouchMove(e: TouchEvent) {
@@ -90,7 +92,8 @@
 
     if (pullDistance >= threshold && !refreshing) {
       refreshing = true
-      // Keep indicator visible at threshold while refreshing
+      if (circleEl) circleEl.style.strokeDashoffset = '0'
+      if (ringEl) ringEl.classList.add('ptr-spinning')
       updateIndicator(threshold)
 
       try {
@@ -113,9 +116,7 @@
     if (!el) return
 
     const onTouchMove = (e: TouchEvent) => handleTouchMove(e)
-    // passive: true — we don't preventDefault, let native overscroll work
     el.addEventListener('touchmove', onTouchMove, { passive: true })
-
     hideIndicator(false)
 
     return () => {
@@ -130,27 +131,43 @@
   ontouchend={handleTouchEnd}
   ontouchcancel={handleTouchEnd}
 >
-  <!-- Fixed indicator at top — just visual, doesn't move content -->
   <div bind:this={indicatorEl} class="ptr-indicator">
-    <div bind:this={iconEl} class="ptr-icon">
-      {#if refreshing}
-        <RefreshCw size={16} class="animate-spin" />
-      {:else}
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
+    <div class="ptr-badge">
+      <!-- Outer ring SVG -->
+      <svg
+        bind:this={ringEl}
+        class="ptr-ring"
+        width="44"
+        height="44"
+        viewBox="0 0 44 44"
+      >
+        <!-- Background track -->
+        <circle
+          cx="22"
+          cy="22"
+          r={RADIUS}
+          fill="none"
+          stroke="var(--color-border)"
+          stroke-width="2"
+        />
+        <!-- Progress arc -->
+        <circle
+          bind:this={circleEl}
+          cx="22"
+          cy="22"
+          r={RADIUS}
           fill="none"
           stroke="currentColor"
-          stroke-width="2"
+          stroke-width="2.5"
           stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M12 5v14" />
-          <path d="m19 12-7 7-7-7" />
-        </svg>
-      {/if}
+          stroke-dasharray={CIRCUMFERENCE}
+          stroke-dashoffset={CIRCUMFERENCE}
+        />
+      </svg>
+      <!-- Center icon -->
+      <div class="ptr-icon">
+        <RefreshCw size={16} />
+      </div>
     </div>
   </div>
 
@@ -169,23 +186,38 @@
     right: 0;
     display: flex;
     justify-content: center;
-    padding-top: 12px;
+    padding-top: 8px;
     pointer-events: none;
     z-index: 50;
     opacity: 0;
   }
 
+  .ptr-badge {
+    position: relative;
+    width: 44px;
+    height: 44px;
+  }
+
+  .ptr-ring {
+    transform: rotate(-90deg);
+    color: var(--color-text-main);
+  }
+
   .ptr-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
+    position: absolute;
+    inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--color-bg-btn);
-    border: 1px solid var(--color-border);
     color: var(--color-text-secondary);
-    transition: transform 0.2s ease, color 0.15s ease;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+
+  :global(.ptr-spinning) {
+    animation: ptr-spin 0.7s linear infinite !important;
+  }
+
+  @keyframes ptr-spin {
+    from { transform: rotate(-90deg); }
+    to { transform: rotate(270deg); }
   }
 </style>
