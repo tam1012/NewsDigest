@@ -27,6 +27,7 @@
   import { articleCache } from '$lib/stores/articleCache.svelte'
   import SourceFilter from '$lib/components/app/SourceFilter.svelte'
   import MobileArticleSheet from '$lib/components/app/MobileArticleSheet.svelte'
+  import PullToRefresh from '$lib/components/app/PullToRefresh.svelte'
 
   let { data } = $props()
 
@@ -62,6 +63,8 @@
 
   // ── Mobile / Drawer state ──────────────────────────────────
   let drawerOpen = $state(false)
+  // True while PullToRefresh indicator is visible → nav becomes transparent
+  let ptrActive = $state(false)
 
   // Also fetch sources client-side
   async function fetchSources() {
@@ -419,7 +422,10 @@
   ></div>
   <div class="mobile-layout relative bg-bg-1">
     <!-- Mobile Top Header / Navigator -->
-    <nav class="flex justify-between px-4 py-8">
+    <nav
+      class="flex justify-between px-4 py-8"
+      style="opacity: {ptrActive ? 0 : 1}; pointer-events: {ptrActive ? 'none' : 'auto'}; transition: opacity 0.2s ease;"
+    >
       <div class="flex gap-3">
         <CusButton onclick={() => goToDate(-1)} class="size-10">
           <ChevronLeft class="-translate-x-px" size={20} />
@@ -616,6 +622,11 @@
     {/if}
 
     <!-- Mobile Article List / Digest (body scroll) -->
+    <PullToRefresh
+      onRefresh={() => articleCache.forceRefresh(data.currentDate)}
+      onIndicatorChange={(v) => (ptrActive = v)}
+      disabled={loading}
+    >
     <div class="mobile-content" style="font-size: var(--font-size-base);">
       {#if loading}
         <div class="flex flex-col gap-8 animate-pulse">
@@ -708,6 +719,7 @@
         </div>
       {/if}
     </div>
+    </PullToRefresh>
   </div>
 
   <MobileArticleSheet
