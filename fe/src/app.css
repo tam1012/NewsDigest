@@ -248,3 +248,11 @@ aside[data-overlayscrollbars] {
 * {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* ═══════════════ PWA STANDALONE: disable native pull-to-refresh ═══════════════ */
+@media (display-mode: standalone) {
+  html,
+  body {
+    overscroll-behavior-y: contain;
+  }
+}

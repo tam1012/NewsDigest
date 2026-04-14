@@ -27,6 +27,7 @@
   import { articleCache } from '$lib/stores/articleCache.svelte'
   import SourceFilter from '$lib/components/app/SourceFilter.svelte'
   import MobileArticleSheet from '$lib/components/app/MobileArticleSheet.svelte'
+  import PullToRefresh from '$lib/components/app/PullToRefresh.svelte'
 
   let { data } = $props()
 
@@ -616,6 +617,10 @@
     {/if}
 
     <!-- Mobile Article List / Digest (body scroll) -->
+    <PullToRefresh
+      onRefresh={() => articleCache.forceRefresh(data.currentDate)}
+      disabled={loading}
+    >
     <div class="mobile-content" style="font-size: var(--font-size-base);">
       {#if loading}
         <div class="flex flex-col gap-8 animate-pulse">
@@ -708,6 +713,7 @@
         </div>
       {/if}
     </div>
+    </PullToRefresh>
   </div>
 
   <MobileArticleSheet
