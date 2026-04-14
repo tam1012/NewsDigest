@@ -5,11 +5,13 @@
 
   let {
     onRefresh,
+    onIndicatorChange,
     disabled = false,
     threshold = 80,
     children,
   }: {
     onRefresh: () => Promise<void>
+    onIndicatorChange?: (visible: boolean) => void
     disabled?: boolean
     threshold?: number
     children?: Snippet
@@ -21,11 +23,25 @@
   let pulling = false
   let startY = 0
   let pullDistance = 0
+  let refreshStartTime = 0
+
+  // Minimum time the indicator stays visible after refresh completes
+  const MIN_INDICATOR_MS = 1000
+  // Delay before showing indicator (let nav fade out first ~0.2s)
+  const SHOW_DELAY_MS = 200
+  // Delay before nav fades back in after indicator hides (~0.3s)
+  const HIDE_NAV_DELAY_MS = 300
+
+  let showDelayTimer: ReturnType<typeof setTimeout> | null = null
+
+  function setIndicator(visible: boolean) {
+    showIndicator = visible
+    onIndicatorChange?.(visible)
+  }
 
   const DEAD_ZONE = 20
 
   let circleEl: SVGCircleElement | undefined = $state()
-  let ringEl: SVGSVGElement | undefined = $state()
   let iconEl: HTMLDivElement | undefined = $state()
 
   const RADIUS = 18
@@ -45,19 +61,10 @@
     // Stroke progress
     const offset = CIRCUMFERENCE * (1 - progress)
     circleEl.style.strokeDashoffset = `${offset}`
-
-    // Icon color at 100%
-    if (iconEl) {
-      iconEl.style.color = progress >= 1
-        ? 'var(--color-text-main)'
-        : 'var(--color-text-secondary)'
-    }
   }
 
   function resetRing() {
     if (circleEl) circleEl.style.strokeDashoffset = `${CIRCUMFERENCE}`
-    if (ringEl) ringEl.classList.remove('ptr-spinning')
-    if (iconEl) iconEl.style.color = 'var(--color-text-secondary)'
   }
 
   function handleTouchStart(e: TouchEvent) {
@@ -77,21 +84,37 @@
     if (rawDelta <= 0) {
       if (pullDistance > 0) {
         pullDistance = 0
-        showIndicator = false
+        cancelShowDelay()
+        setIndicator(false)
       }
       return
     }
 
     pullDistance = applyResistance(rawDelta)
 
-    // Show indicator after dead zone
-    if (pullDistance > DEAD_ZONE && !showIndicator) {
-      showIndicator = true
-    } else if (pullDistance <= DEAD_ZONE && showIndicator) {
-      showIndicator = false
+    // Telegraph nav hide immediately; indicator appears after SHOW_DELAY_MS
+    if (pullDistance > DEAD_ZONE && !showIndicator && !showDelayTimer) {
+      // Notify nav to fade out right away
+      onIndicatorChange?.(true)
+      // Then show indicator after delay
+      showDelayTimer = setTimeout(() => {
+        showDelayTimer = null
+        showIndicator = true
+      }, SHOW_DELAY_MS)
+    } else if (pullDistance <= DEAD_ZONE) {
+      cancelShowDelay()
+      if (showIndicator) setIndicator(false)
+      else onIndicatorChange?.(false)
     }
 
     updateRing(pullDistance)
+  }
+
+  function cancelShowDelay() {
+    if (showDelayTimer) {
+      clearTimeout(showDelayTimer)
+      showDelayTimer = null
+    }
   }
 
   async function handleTouchEnd() {
@@ -99,26 +122,41 @@
     pulling = false
 
     if (pullDistance >= threshold && !refreshing) {
+      cancelShowDelay()
       refreshing = true
+      refreshStartTime = Date.now()
+      // Ensure indicator is visible
+      showIndicator = true
       if (circleEl) circleEl.style.strokeDashoffset = '0'
-      if (ringEl) ringEl.classList.add('ptr-spinning')
-      if (iconEl) iconEl.style.color = 'var(--color-text-main)'
 
       try {
         await onRefresh()
       } catch (e) {
         console.error('Pull-to-refresh failed', e)
       } finally {
-        refreshing = false
         pullDistance = 0
-        showIndicator = false
-        // Reset ring after hide transition
-        setTimeout(() => resetRing(), 300)
+        // Keep spinning for at least MIN_INDICATOR_MS total
+        const elapsed = Date.now() - refreshStartTime
+        const remaining = Math.max(0, MIN_INDICATOR_MS - elapsed)
+        setTimeout(() => {
+          refreshing = false
+          showIndicator = false
+          // Delay nav fade-in by HIDE_NAV_DELAY_MS after indicator hides
+          setTimeout(() => {
+            onIndicatorChange?.(false)
+            setTimeout(() => resetRing(), 300)
+          }, HIDE_NAV_DELAY_MS)
+        }, remaining)
       }
     } else {
+      cancelShowDelay()
       pullDistance = 0
       showIndicator = false
-      setTimeout(() => resetRing(), 300)
+      // Nav fades back after short delay
+      setTimeout(() => {
+        onIndicatorChange?.(false)
+        setTimeout(() => resetRing(), 300)
+      }, HIDE_NAV_DELAY_MS)
     }
   }
 
@@ -144,40 +182,36 @@
   {#if showIndicator}
     <div
       class="ptr-indicator"
-      in:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
-      out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+      in:slideScaleFade={{ duration: 400, startScale: 0.85, startOpacity: 0 }}
+      out:slideScaleFade={{ duration: 400, startScale: 0.85, startOpacity: 0 }}
     >
       <div class="ptr-badge">
-        <svg
-          bind:this={ringEl}
-          class="ptr-ring"
-          width="44"
-          height="44"
-          viewBox="0 0 44 44"
-        >
-          <circle
-            cx="22"
-            cy="22"
-            r={RADIUS}
-            fill="none"
-            stroke="var(--color-border)"
-            stroke-width="2"
-          />
-          <circle
-            bind:this={circleEl}
-            cx="22"
-            cy="22"
-            r={RADIUS}
-            fill="none"
-            stroke="var(--color-text-main)"
-            stroke-width="2.5"
-            stroke-linecap="round"
-            stroke-dasharray={CIRCUMFERENCE}
-            stroke-dashoffset={CIRCUMFERENCE}
-          />
-        </svg>
-        <div bind:this={iconEl} class="ptr-icon">
-          <RefreshCw size={16} />
+        {#if !refreshing}
+          <svg class="ptr-ring" width="44" height="44" viewBox="0 0 44 44">
+            <circle
+              cx="22"
+              cy="22"
+              r={RADIUS}
+              fill="none"
+              stroke="var(--color-border)"
+              stroke-width="2"
+            />
+            <circle
+              bind:this={circleEl}
+              cx="22"
+              cy="22"
+              r={RADIUS}
+              fill="none"
+              stroke="var(--color-text-main)"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-dasharray={CIRCUMFERENCE}
+              stroke-dashoffset={CIRCUMFERENCE}
+            />
+          </svg>
+        {/if}
+        <div class="ptr-icon">
+          <RefreshCw size={16} class={refreshing ? 'animate-spin' : ''} />
         </div>
       </div>
     </div>
@@ -223,14 +257,5 @@
     justify-content: center;
     color: var(--color-text-secondary);
     transition: color 0.15s ease;
-  }
-
-  :global(.ptr-spinning) {
-    animation: ptr-spin 0.7s linear infinite !important;
-  }
-
-  @keyframes ptr-spin {
-    from { transform: rotate(-90deg); }
-    to { transform: rotate(270deg); }
   }
 </style>
