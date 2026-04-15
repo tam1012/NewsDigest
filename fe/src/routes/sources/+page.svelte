@@ -5,7 +5,7 @@
   import CusButton from '$lib/components/ui/CusButton.svelte';
   import * as Dialog from '$lib/components/ui/dialog/index.js';
   import { Input } from '$lib/components/ui/input';
-  import { Switch } from '$lib/components/ui/switch';
+  import Switch from '$lib/components/app/Switch.svelte';
   import { sources } from '$lib/stores/sources';
   import type { Source } from '$lib/types';
   import { toast } from 'svelte-sonner';
