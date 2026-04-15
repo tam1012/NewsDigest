@@ -28,6 +28,7 @@
   import SourceFilter from '$lib/components/app/SourceFilter.svelte'
   import MobileArticleSheet from '$lib/components/app/MobileArticleSheet.svelte'
   import PullToRefresh from '$lib/components/app/PullToRefresh.svelte'
+  import { getStoredAdminKey } from '$lib/admin'
 
   let { data } = $props()
 
@@ -89,8 +90,7 @@
   onMount(() => {
     fetchSources()
     // Check admin auth from localStorage (shared with /sources page)
-    const savedKey = localStorage.getItem('newsdigest_admin_key')
-    isAdmin = !!savedKey && savedKey.trim().length > 0
+    isAdmin = getStoredAdminKey().length > 0
 
     // PWA resume: detect when app comes back from background
     // Track what "today" was when the user last saw the page,
@@ -137,7 +137,10 @@
     if (resummarizing || aiButtonHidden) return
     resummarizing = true
     try {
-      const res = await fetch('/api/resummarize', { method: 'POST' })
+      const res = await fetch(api('/api/articles/enqueue-scrape'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
       const result = await res.json()
       if (result.ok !== false) {
         const enqueued = result.enqueued ?? 0

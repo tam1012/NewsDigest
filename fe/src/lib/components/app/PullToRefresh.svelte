@@ -164,7 +164,7 @@
     const wrapper = document.querySelector('.ptr-wrapper')
     if (!wrapper) return
 
-    const onTouchMove = (e: TouchEvent) => handleTouchMove(e)
+    const onTouchMove: EventListener = (event) => handleTouchMove(event as TouchEvent)
     wrapper.addEventListener('touchmove', onTouchMove, { passive: true })
 
     return () => {
@@ -175,6 +175,7 @@
 
 <div
   class="ptr-wrapper"
+  role="presentation"
   ontouchstart={handleTouchStart}
   ontouchend={handleTouchEnd}
   ontouchcancel={handleTouchEnd}

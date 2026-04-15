@@ -15,6 +15,10 @@ function loadFromStorage(): Source[] {
 
 function saveToStorage(data: Source[]) {
   try {
+    if (data.length === 0) {
+      localStorage.removeItem(STORAGE_KEY);
+      return;
+    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch { /* ignore quota errors */ }
 }
@@ -26,8 +30,6 @@ export const sources = writable<Source[]>(initial);
 // Persist whenever the store updates
 if (typeof window !== 'undefined') {
   sources.subscribe((value) => {
-    if (value.length > 0) {
-      saveToStorage(value);
-    }
+    saveToStorage(value);
   });
 }

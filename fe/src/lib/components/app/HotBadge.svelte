@@ -4,7 +4,9 @@
   
   let { score }: { score: number | null } = $props();
   
-  let variant = $derived(score && score >= 8 ? 'destructive' : score && score >= 5 ? 'default' : 'secondary');
+  let variant = $derived<'destructive' | 'default' | 'secondary'>(
+    score && score >= 8 ? 'destructive' : score && score >= 5 ? 'default' : 'secondary'
+  );
   let label = $derived(score && score >= 8 ? `Hot ${score}` : score ? `${score}/10` : 'N/A');
 </script>
 

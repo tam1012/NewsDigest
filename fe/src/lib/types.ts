@@ -17,11 +17,14 @@ export interface Source {
   id: string;
   url: string;
   name: string;
-  type: 'rss' | 'html' | 'reddit' | 'youtube' | 'voz';
+  type: 'rss' | 'html' | 'reddit' | 'youtube' | 'voz' | 'github-trending';
   enabled: number;
   group_name: string | null;
   last_fetched_at: string | null;
   created_at: string;
+  article_count?: number;
+  summarized_count?: number;
+  summarize_rate?: number;
 }
 
 export interface Digest {
@@ -32,4 +35,3 @@ export interface Digest {
   summary_text: string;
   total_fetched: number;
 }
-

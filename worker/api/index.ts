@@ -579,8 +579,39 @@ app.get('/api/digest', async (c) => {
 // ── Sources ──────────────────────────────────────────────
 
 app.get('/api/sources', async (c) => {
-    const { results } = await c.env.DB.prepare('SELECT * FROM sources').all();
+    const { results } = await c.env.DB.prepare(`
+      SELECT
+        s.id,
+        s.url,
+        s.name,
+        s.type,
+        s.enabled,
+        s.group_name,
+        s.last_fetched_at,
+        s.created_at,
+        COUNT(a.id) AS article_count,
+        COALESCE(SUM(CASE WHEN a.summary IS NOT NULL THEN 1 ELSE 0 END), 0) AS summarized_count
+      FROM sources s
+      LEFT JOIN articles a ON a.source_id = s.id
+      GROUP BY s.id
+      ORDER BY COALESCE(s.group_name, 'General') ASC, s.name ASC
+    `).all();
     return c.json({ sources: results });
+});
+
+app.post('/api/sources/resolve', async (c) => {
+    const authErr = requireAdmin(c);
+    if (authErr) return authErr;
+
+    const { url } = await c.req.json();
+    if (!url || typeof url !== 'string') return c.json({ error: 'url is required' }, 400);
+
+    try {
+      const resolved = await resolveSource(url);
+      return c.json({ ok: true, ...resolved });
+    } catch (e: any) {
+      return c.json({ error: e?.message || 'Failed to resolve source URL' }, 400);
+    }
 });
 
 app.post('/api/sources', async (c) => {
@@ -694,7 +725,12 @@ app.post('/api/sources/:id/fetch', async (c) => {
 
             if (result.meta && result.meta.changes > 0) insertedCount++;
         }
-        return c.json({ ok: true, fetched: articles.length, inserted: insertedCount });
+        const lastFetchedAt = new Date().toISOString();
+        await c.env.DB.prepare(
+          'UPDATE sources SET last_fetched_at = ? WHERE id = ?'
+        ).bind(lastFetchedAt, source.id).run();
+
+        return c.json({ ok: true, fetched: articles.length, inserted: insertedCount, last_fetched_at: lastFetchedAt });
     } catch (e: any) {
         return c.json({ error: e.message }, 500);
     }
@@ -728,7 +764,18 @@ app.post('/api/sources/fetch-all', async (c) => {
                 ).bind(aId, src.id, art.url, art.title, art.description || '', normalizeDate(art.published_at)).run();
                 if (result.meta && result.meta.changes > 0) insertedCount++;
             }
-            fetchResults.push({ source_id: src.id, name: src.name, fetched: articles.length, inserted: insertedCount });
+            const lastFetchedAt = new Date().toISOString();
+            await c.env.DB.prepare(
+              'UPDATE sources SET last_fetched_at = ? WHERE id = ?'
+            ).bind(lastFetchedAt, src.id).run();
+
+            fetchResults.push({
+              source_id: src.id,
+              name: src.name,
+              fetched: articles.length,
+              inserted: insertedCount,
+              last_fetched_at: lastFetchedAt
+            });
         } catch (e: any) {
             fetchResults.push({ source_id: src.id, name: src.name, error: e.message });
         }

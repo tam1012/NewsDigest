@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { prefs } from '$lib/stores/prefs'
+  import { Toaster } from '$lib/components/ui/sonner'
   import '../app.css'
   import 'overlayscrollbars/overlayscrollbars.css'
   import { useOverlayScrollbars } from 'overlayscrollbars-svelte'
@@ -60,5 +61,6 @@
 <div
   class="min-h-screen bg-bg-1 sm:bg-linear-to-r sm:from-bg-1 sm:from-65% sm:to-bg-2 sm:to-65%"
 >
+  <Toaster richColors position="top-right" />
   {@render children()}
 </div>
