@@ -191,7 +191,9 @@
       refreshCooldown = true
       setTimeout(() => (refreshCooldown = false), 400)
     }
-    untrack(() => { prevIsToday = currentIsToday })
+    untrack(() => {
+      prevIsToday = currentIsToday
+    })
   })
 
   let formattedDate = $derived.by(() => {
@@ -252,7 +254,9 @@
         }
       })
     }
-    untrack(() => { prevFilterKey = filterKey })
+    untrack(() => {
+      prevFilterKey = filterKey
+    })
   })
 
   let hasActiveFilter = $derived(!!$filters.sourceId || !!$filters.tag)
@@ -290,7 +294,9 @@
     if (article && !isMobile) {
       const prevId = untrack(() => lastScrollInfo.articleId)
       if (article.id !== prevId) {
-        untrack(() => { lastScrollInfo = { articleId: article.id } })
+        untrack(() => {
+          lastScrollInfo = { articleId: article.id }
+        })
         tick().then(() => {
           const viewport = document.querySelectorAll(
             '[data-overlayscrollbars-viewport]',
@@ -427,7 +433,9 @@
     <!-- Mobile Top Header / Navigator -->
     <nav
       class="flex justify-between px-4 py-8"
-      style="opacity: {ptrActive ? 0 : 1}; pointer-events: {ptrActive ? 'none' : 'auto'}; transition: opacity 0.2s ease;"
+      style="opacity: {ptrActive ? 0 : 1}; pointer-events: {ptrActive
+        ? 'none'
+        : 'auto'}; transition: opacity 0.2s ease;"
     >
       <div class="flex gap-3">
         <CusButton onclick={() => goToDate(-1)} class="size-10">
@@ -630,98 +638,100 @@
       onIndicatorChange={(v) => (ptrActive = v)}
       disabled={loading}
     >
-    <div class="mobile-content" style="font-size: var(--font-size-base);">
-      {#if loading}
-        <div class="flex flex-col gap-8 animate-pulse">
-          {#each Array(6) as _}
-            <div>
-              <div class="flex items-center gap-2 mb-2">
+      <div class="mobile-content" style="font-size: var(--font-size-base);">
+        {#if loading}
+          <div class="flex flex-col gap-8 animate-pulse">
+            {#each Array(6) as _}
+              <div>
+                <div class="flex items-center gap-2 mb-2">
+                  <div
+                    class="h-3 w-20 rounded bg-zinc-200 dark:bg-zinc-800"
+                  ></div>
+                  <div
+                    class="h-3 w-10 rounded bg-zinc-200 dark:bg-zinc-800"
+                  ></div>
+                </div>
                 <div
-                  class="h-3 w-20 rounded bg-zinc-200 dark:bg-zinc-800"
+                  class="h-5 w-full rounded bg-zinc-200 dark:bg-zinc-800 mb-2"
                 ></div>
                 <div
-                  class="h-3 w-10 rounded bg-zinc-200 dark:bg-zinc-800"
+                  class="h-4 w-3/4 rounded bg-zinc-200 dark:bg-zinc-800 mb-1"
+                ></div>
+                <div
+                  class="h-4 w-1/2 rounded bg-zinc-200 dark:bg-zinc-800"
                 ></div>
               </div>
-              <div
-                class="h-5 w-full rounded bg-zinc-200 dark:bg-zinc-800 mb-2"
-              ></div>
-              <div
-                class="h-4 w-3/4 rounded bg-zinc-200 dark:bg-zinc-800 mb-1"
-              ></div>
-              <div class="h-4 w-1/2 rounded bg-zinc-200 dark:bg-zinc-800"></div>
-            </div>
-          {/each}
-        </div>
-      {:else if sideView === 'digest'}
-        {#if digest}
-          <!-- svelte-ignore a11y_click_events_have_key_events -->
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div
-            class="prose prose-sm max-w-none text-text-main-2 prose-headings:text-text-main! prose-p:text-text-main-2! prose-li:text-text-main-2! prose-a:text-text-main-2! prose-strong:text-text-main! prose-headings:text-base prose-headings:mt-6 prose-headings:mb-2 prose-p:leading-relaxed"
-            onclick={handleDigestClick}
-          >
-            {@html parsedDigestHtml}
+            {/each}
           </div>
-        {:else}
-          <div
-            class="text-sm text-zinc-500 py-10 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl"
-          >
-            Chưa có bản tin tổng hợp cho ngày này.
-          </div>
-        {/if}
-      {:else}
-        <div class="flex flex-col gap-6 pb-16">
-          {#each filteredArticles as article (article.id)}
+        {:else if sideView === 'digest'}
+          {#if digest}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
-              class="cursor-pointer relative group"
-              onclick={() => selectArticle(article)}
+              class="prose prose-sm max-w-none text-text-main-2 prose-headings:text-text-main! prose-p:text-text-main-2! prose-li:text-text-main-2! prose-a:text-text-main-2! prose-strong:text-text-main! prose-headings:text-base prose-headings:mt-6 prose-headings:mb-2 prose-p:leading-relaxed"
+              onclick={handleDigestClick}
             >
-              <div
-                class="flex items-center text-[0.675em] text-text-secondary uppercase tracking-wider mb-2"
-              >
-                <span class="truncate pr-4"
-                  >{getSourceName(article.source_id)}</span
-                >
-                <span class="whitespace-nowrap shrink-0">
-                  {new Date(
-                    article.published_at || article.fetched_at,
-                  ).toLocaleTimeString('vi-VN', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </span>
-              </div>
-              <h3
-                class="font-serif text-[1.125em] leading-[1.4] mb-2 font-semibold text-text-main group-hover:underline underline-offset-4 transition-all line-clamp-4 wrap-break-word"
-              >
-                {@html article.title}
-              </h3>
-              <p
-                class="text-[1em] text-text-main-2/70 leading-relaxed line-clamp-10 wrap-break-word"
-              >
-                {article.description_vn ||
-                  article.description ||
-                  article.summary
-                    ?.replace(/<[^>]*>?/gm, '')
-                    .substring(0, 150) ||
-                  'Đang xử lý nội dung...'}
-              </p>
+              {@html parsedDigestHtml}
             </div>
-          {/each}
-
-          {#if filteredArticles.length === 0}
+          {:else}
             <div
               class="text-sm text-zinc-500 py-10 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl"
             >
-              Không có bài viết nào trong ngày này.
+              Chưa có bản tin tổng hợp cho ngày này.
             </div>
           {/if}
-        </div>
-      {/if}
-    </div>
+        {:else}
+          <div class="flex flex-col gap-6 pb-16">
+            {#each filteredArticles as article (article.id)}
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div
+                class="cursor-pointer relative group"
+                onclick={() => selectArticle(article)}
+              >
+                <div
+                  class="flex items-center text-[0.675em] text-text-secondary uppercase tracking-wider mb-2"
+                >
+                  <span class="truncate pr-4"
+                    >{getSourceName(article.source_id)}</span
+                  >
+                  <span class="whitespace-nowrap shrink-0">
+                    {new Date(
+                      article.published_at || article.fetched_at,
+                    ).toLocaleTimeString('vi-VN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </div>
+                <h3
+                  class="font-serif text-[1.125em] leading-[1.4] mb-2 font-semibold text-text-main group-hover:underline underline-offset-4 transition-all line-clamp-4 wrap-break-word"
+                >
+                  {@html article.title}
+                </h3>
+                <p
+                  class="text-[1em] text-text-main-2/70 leading-relaxed line-clamp-10 wrap-break-word"
+                >
+                  {article.description_vn ||
+                    article.description ||
+                    article.summary
+                      ?.replace(/<[^>]*>?/gm, '')
+                      .substring(0, 150) ||
+                    'Đang xử lý nội dung...'}
+                </p>
+              </div>
+            {/each}
+
+            {#if filteredArticles.length === 0}
+              <div
+                class="text-sm text-zinc-500 py-10 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl"
+              >
+                Không có bài viết nào trong ngày này.
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </div>
     </PullToRefresh>
   </div>
 

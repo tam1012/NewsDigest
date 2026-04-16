@@ -4,6 +4,7 @@
   import {
     slideScaleFade,
     type SlideDirection,
+    type SlideScaleFadeParams,
   } from '$lib/transitions/slideScaleFade'
   import type { Snippet } from 'svelte'
 
@@ -14,9 +15,13 @@
     side = 'bottom',
     class: className,
     children,
+    inTransition,
+    outTransition,
     ...restProps
   }: PopoverPrimitive.ContentProps & {
     children?: Snippet
+    inTransition?: SlideScaleFadeParams
+    outTransition?: SlideScaleFadeParams
   } = $props()
 
   const getSlideFrom = (currentSide: string): SlideDirection => {
@@ -61,6 +66,7 @@
               slideDistance: '0.35rem',
               startScale: 0.95,
               startOpacity: 0,
+              ...inTransition,
             }}
             out:slideScaleFade={{
               duration: 140,
@@ -68,6 +74,7 @@
               slideDistance: '0.35rem',
               startScale: 0.95,
               startOpacity: 0,
+              ...outTransition,
             }}
             data-slot="popover-content"
             class={cn(
