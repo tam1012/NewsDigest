@@ -70,6 +70,11 @@ function buildDateRange(date: string) {
   };
 }
 
+/** Thrown when the SW returns an offline stub instead of real data. */
+class OfflineError extends Error {
+  constructor() { super('offline'); }
+}
+
 async function fetchArticlesPage(
   date: string,
   page: number,
@@ -82,6 +87,8 @@ async function fetchArticlesPage(
     ),
   );
   const data = await res.json();
+  // SW offline stub: { offline: true }
+  if (data.offline) throw new OfflineError();
   return {
     articles: (data.articles ?? []) as Article[],
     total: data.total ?? 0,
@@ -92,6 +99,7 @@ async function fetchArticlesPage(
 async function fetchDigest(date: string): Promise<Digest | null> {
   const res = await fetch(api(`/api/digest?date=${date}`));
   const data = await res.json();
+  if (data.offline) throw new OfflineError();
   return (data.digest ?? null) as Digest | null;
 }
 
@@ -251,7 +259,12 @@ async function loadDate(date: string) {
     }
   } catch (e) {
     if (_loadCallId !== callId) return;
-    console.error('Failed to fetch articles', e);
+    if (e instanceof OfflineError) {
+      // Offline with no local cache for this date — show empty state
+      console.info('[articleCache] Offline, no cache for', date);
+    } else {
+      console.error('Failed to fetch articles', e);
+    }
     _articles = [];
     _digest = null;
     _loading = false;
@@ -345,7 +358,12 @@ async function backgroundRefresh(date: string, cacheData: CachedDayData) {
       console.log(`📰 ${newCount} bài mới được cập nhật`);
     }
   } catch (e) {
-    console.error('Background refresh failed', e);
+    if (e instanceof OfflineError) {
+      // Silently skip — cached data is already displayed, nothing to update
+      console.info('[articleCache] Offline, skipping background refresh');
+    } else {
+      console.error('Background refresh failed', e);
+    }
   } finally {
     if (_currentDate === date) {
       _refreshing = false;
