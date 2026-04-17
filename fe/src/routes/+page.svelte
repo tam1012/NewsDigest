@@ -433,40 +433,8 @@
           class="size-10"
           disabled={isToday}
         >
-          <div class="grid place-items-center">
-            {#if isToday}
-              <div
-                class="col-start-1 row-start-1 opacity-50"
-                in:slideScaleFade={{
-                  duration: 250,
-                  startScale: 0.5,
-                  startOpacity: 0,
-                }}
-                out:slideScaleFade={{
-                  duration: 200,
-                  startScale: 0.5,
-                  startOpacity: 0,
-                }}
-              >
-                <ChevronRight class="translate-x-px" size={20} />
-              </div>
-            {:else}
-              <div
-                class="col-start-1 row-start-1"
-                in:slideScaleFade={{
-                  duration: 250,
-                  startScale: 0.5,
-                  startOpacity: 0,
-                }}
-                out:slideScaleFade={{
-                  duration: 200,
-                  startScale: 0.5,
-                  startOpacity: 0,
-                }}
-              >
-                <ChevronRight class="translate-x-px" size={20} />
-              </div>
-            {/if}
+          <div class="transition-opacity duration-200" class:opacity-50={isToday}>
+            <ChevronRight class="translate-x-px" size={20} />
           </div>
         </CusButton>
       </div>
@@ -484,11 +452,25 @@
           onclick={() => ($prefs.darkMode = !$prefs.darkMode)}
           class="size-10"
         >
-          {#if $prefs.darkMode}
-            <Sun size={16} />
-          {:else}
-            <Moon size={16} />
-          {/if}
+          <div class="grid place-items-center">
+            {#if $prefs.darkMode}
+              <div
+                class="col-start-1 row-start-1"
+                in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
+                out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+              >
+                <Sun size={16} />
+              </div>
+            {:else}
+              <div
+                class="col-start-1 row-start-1"
+                in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
+                out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+              >
+                <Moon size={16} />
+              </div>
+            {/if}
+          </div>
         </CusButton>
       </div>
     </nav>
@@ -748,40 +730,8 @@
             class="size-8"
             disabled={isToday}
           >
-            <div class="grid place-items-center">
-              {#if isToday}
-                <div
-                  class="col-start-1 row-start-1 opacity-50"
-                  in:slideScaleFade={{
-                    duration: 250,
-                    startScale: 0.5,
-                    startOpacity: 0,
-                  }}
-                  out:slideScaleFade={{
-                    duration: 200,
-                    startScale: 0.5,
-                    startOpacity: 0,
-                  }}
-                >
-                  <ChevronRight class="translate-x-px" size={20} />
-                </div>
-              {:else}
-                <div
-                  class="col-start-1 row-start-1"
-                  in:slideScaleFade={{
-                    duration: 250,
-                    startScale: 0.5,
-                    startOpacity: 0,
-                  }}
-                  out:slideScaleFade={{
-                    duration: 200,
-                    startScale: 0.5,
-                    startOpacity: 0,
-                  }}
-                >
-                  <ChevronRight class="translate-x-px" size={20} />
-                </div>
-              {/if}
+            <div class="transition-opacity duration-200" class:opacity-50={isToday}>
+              <ChevronRight class="translate-x-px" size={20} />
             </div>
           </CusButton>
         </div>
@@ -976,8 +926,8 @@
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div
-                class="cursor-pointer relative group article-item {isSelected
-                  ? 'article-selected'
+                class="cursor-pointer relative group after:w-0 after:-translate-x-6 after:bg-border article-item {isSelected
+                  ? 'after:absolute after:left-0 after:top-0 after:bottom-0 after:w-1.5! after:rounded-l-4xl'
                   : ''}"
                 onclick={() => selectArticle(article)}
               >
@@ -1062,11 +1012,25 @@
               onclick={() => ($prefs.darkMode = !$prefs.darkMode)}
               class="size-8"
             >
-              {#if $prefs.darkMode}
-                <Sun size={16} />
-              {:else}
-                <Moon size={16} />
-              {/if}
+              <div class="grid place-items-center">
+                {#if $prefs.darkMode}
+                  <div
+                    class="col-start-1 row-start-1"
+                    in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
+                    out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+                  >
+                    <Sun size={16} />
+                  </div>
+                {:else}
+                  <div
+                    class="col-start-1 row-start-1"
+                    in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
+                    out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+                  >
+                    <Moon size={16} />
+                  </div>
+                {/if}
+              </div>
             </CusButton>
           </div>
         </div>

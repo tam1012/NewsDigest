@@ -11,13 +11,7 @@
   import { sources } from '$lib/stores/sources'
   import type { Source } from '$lib/types'
   import { toast } from 'svelte-sonner'
-  import {
-    ArrowLeft,
-    Loader2,
-    Lock,
-    LockOpen,
-    RefreshCw,
-  } from 'lucide-svelte'
+  import { ArrowLeft, Loader2, Lock, LockOpen, RefreshCw } from 'lucide-svelte'
 
   import SourceItem from './components/SourceItem.svelte'
   import SourceDeleteDialog from './components/SourceDeleteDialog.svelte'
@@ -62,8 +56,6 @@
     adminKey = getStoredAdminKey()
     fetchSources()
   })
-
-
 
   function normalizeSource(source: Record<string, unknown>): Source {
     return source as unknown as Source
@@ -180,8 +172,6 @@
     toast.message('Đã đăng xuất.')
   }
 
-
-
   async function addSource() {
     const normalizedUrl = newUrl.trim()
     if (!normalizedUrl) return
@@ -260,8 +250,6 @@
       if (!res.ok || !result.ok) {
         throw new Error(result.error || 'Không thể cập nhật.')
       }
-
-      toast.success(nextEnabled ? 'Đã bật nguồn tin.' : 'Đã tắt nguồn tin.')
     } catch (error) {
       $sources = snapshot
       const message =
@@ -377,8 +365,6 @@
       isFetchingAll = false
     }
   }
-
-
 </script>
 
 <svelte:head>
@@ -475,12 +461,7 @@
 
     <!-- Add Source (admin only) -->
     {#if isAuthed}
-      <AddSourceForm
-        bind:newUrl
-        bind:newName
-        {isAdding}
-        onAdd={addSource}
-      />
+      <AddSourceForm bind:newUrl bind:newName {isAdding} onAdd={addSource} />
     {/if}
 
     <!-- Sources List -->
@@ -513,7 +494,7 @@
           : ' Đăng nhập admin để thêm.'}
       </div>
     {:else}
-      <div class="flex flex-col gap-2">
+      <div class="flex flex-col divide-y divide-dashed divide-border">
         {#each sortedSources as source (source.id)}
           {@const typeInfo = getTypeIcon(source.type)}
           {@const isFetching = fetchingSourceId === source.id}

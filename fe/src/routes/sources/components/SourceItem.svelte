@@ -37,10 +37,8 @@
   let popoverOpen = $state(false)
 </script>
 
-<article
-  class="group rounded-xl border border-border/50 bg-bg-btn transition-[border-color] duration-200 hover:border-border"
->
-  <div class="flex items-start gap-3.5 p-4">
+<article class="group">
+  <div class="flex items-center gap-3.5 py-6 px-2">
     <!-- Type icon -->
     <div
       class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-bg-1 dark:bg-bg-1/60 border border-border/40"
@@ -131,7 +129,7 @@
           <Switch
             checked={source.enabled === 1}
             disabled={isToggling}
-            onCheckedChange={onToggle}
+            onclick={onToggle}
           />
         </div>
 
@@ -149,69 +147,72 @@
               {/snippet}
             </Popover.Trigger>
             <Popover.Portal>
-            <Popover.Content
-              align="end"
-              sideOffset={8}
-              class="z-50 w-48 p-0 flex flex-col rounded-3xl border border-white bg-bg-btn dark:border-white/10 dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)] outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2"
-            >
-              <div class="overflow-y-auto flex flex-col p-1 gap-1">
-                <button
-                  onclick={() => {
-                    popoverOpen = false
-                    onManualFetch()
-                  }}
-                  disabled={isFetching}
-                  class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-full text-left text-sm transition-colors cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-text-main disabled:opacity-50"
-                >
-                  {#if isFetching}
-                    <Loader2
-                      size={16}
-                      class="animate-spin text-text-secondary shrink-0"
-                    />
-                  {:else}
-                    <RefreshCw size={16} class="text-text-secondary shrink-0" />
-                  {/if}
-                  <span class="flex-1 font-medium">Fetch thủ công</span>
-                </button>
-
-                <button
-                  onclick={() => {
-                    popoverOpen = false
-                    onEdit()
-                  }}
-                  class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-full text-left text-sm transition-colors cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-text-main"
-                >
-                  <Pencil size={16} class="text-text-secondary shrink-0" />
-                  <span class="flex-1 font-medium">Sửa nguồn</span>
-                </button>
-
-                <button
-                  onclick={() => {
-                    popoverOpen = false
-                    onDelete()
-                  }}
-                  class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-full text-left text-sm transition-colors cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/30 text-red-600 dark:text-red-400"
-                >
-                  <Trash2 size={16} class="shrink-0" />
-                  <span class="flex-1 font-medium">Xoá nguồn</span>
-                </button>
-
-                <div
-                  class="h-px bg-border max-w-[calc(100%-24px)] mx-auto w-full my-0.5"
-                ></div>
-
-                <div class="flex items-center justify-between px-3 py-2">
-                  <span class="text-sm font-medium text-text-main"
-                    >Kích hoạt</span
+              <Popover.Content
+                align="end"
+                sideOffset={8}
+                class="z-50 w-48 p-0 flex flex-col rounded-3xl border border-white bg-bg-btn dark:border-white/10 dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)] outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2"
+              >
+                <div class="overflow-y-auto flex flex-col p-1 gap-1">
+                  <button
+                    onclick={() => {
+                      popoverOpen = false
+                      onManualFetch()
+                    }}
+                    disabled={isFetching}
+                    class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-full text-left text-sm transition-colors cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-text-main disabled:opacity-50"
                   >
-                  <Switch
-                    checked={source.enabled === 1}
-                    disabled={isToggling}
-                    onCheckedChange={onToggle}
-                  />
+                    {#if isFetching}
+                      <Loader2
+                        size={16}
+                        class="animate-spin text-text-secondary shrink-0"
+                      />
+                    {:else}
+                      <RefreshCw
+                        size={16}
+                        class="text-text-secondary shrink-0"
+                      />
+                    {/if}
+                    <span class="flex-1 font-medium">Fetch thủ công</span>
+                  </button>
+
+                  <button
+                    onclick={() => {
+                      popoverOpen = false
+                      onEdit()
+                    }}
+                    class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-full text-left text-sm transition-colors cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-text-main"
+                  >
+                    <Pencil size={16} class="text-text-secondary shrink-0" />
+                    <span class="flex-1 font-medium">Sửa nguồn</span>
+                  </button>
+
+                  <button
+                    onclick={() => {
+                      popoverOpen = false
+                      onDelete()
+                    }}
+                    class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-full text-left text-sm transition-colors cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/30 text-red-600 dark:text-red-400"
+                  >
+                    <Trash2 size={16} class="shrink-0" />
+                    <span class="flex-1 font-medium">Xoá nguồn</span>
+                  </button>
+
+                  <div
+                    class="h-px bg-border max-w-[calc(100%-24px)] mx-auto w-full my-0.5"
+                  ></div>
+
+                  <div class="flex items-center justify-between px-3 py-2">
+                    <span class="text-sm font-medium text-text-main"
+                      >Kích hoạt</span
+                    >
+                    <Switch
+                      checked={source.enabled === 1}
+                      disabled={isToggling}
+                      onclick={onToggle}
+                    />
+                  </div>
                 </div>
-              </div>
-            </Popover.Content>
+              </Popover.Content>
             </Popover.Portal>
           </Popover.Root>
         </div>
