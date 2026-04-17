@@ -273,7 +273,7 @@ export async function handleContentQueue(
     try {
       // Skip if article already has a summary (e.g. duplicate enqueue)
       const { results: existing } = await env.DB.prepare(
-        "SELECT summary FROM articles WHERE id = ?"
+        "SELECT summary, content FROM articles WHERE id = ?"
       ).bind(articleId).all();
       if (existing?.[0] && (existing[0] as any).summary) {
         console.log(`⏭️ Skipping "${title}" — already summarized`);
@@ -281,36 +281,42 @@ export async function handleContentQueue(
         continue;
       }
 
-      let content = '';
+      let content = (existing?.[0] as any)?.content || '';
 
-      if (url.includes('youtube.com') || url.includes('youtu.be')) {
-        // --- YouTube → RapidAPI yt-api (/subtitles) ---
-        const videoId = extractVideoId(url);
-        if (videoId && env.RAPIDAPI_KEY) {
-          content = await fetchYouTubeTranscript(videoId, env);
-        } else if (!videoId) {
-          console.log(`⚠️ Could not extract video ID from ${url}`);
+      if (!content) {
+        if (url.includes('youtube.com') || url.includes('youtu.be')) {
+          // --- YouTube → RapidAPI yt-api (/subtitles) ---
+          const videoId = extractVideoId(url);
+          if (videoId && env.RAPIDAPI_KEY) {
+            content = await fetchYouTubeTranscript(videoId, env);
+          } else if (!videoId) {
+            console.log(`⚠️ Could not extract video ID from ${url}`);
+          } else {
+            console.log(`⚠️ RAPIDAPI_KEY not configured, skipping YouTube transcript`);
+          }
+        } else if (url.includes('reddit.com')) {
+          // --- Reddit → Public JSON ---
+          await new Promise(r => setTimeout(r, 2000));
+          content = await fetchRedditContent(url);
+        } else if (url.match(/^https?:\/\/github\.com\/[^/]+\/[^/]+$/)) {
+          // --- GitHub Repo → Fetch README.md ---
+          content = await fetchGitHubReadme(url);
         } else {
-          console.log(`⚠️ RAPIDAPI_KEY not configured, skipping YouTube transcript`);
+          // --- Other sites → HTMLRewriter ---
+          content = await extractArticleContent(url, env);
         }
-      } else if (url.includes('reddit.com')) {
-        // --- Reddit → Public JSON ---
-        await new Promise(r => setTimeout(r, 2000));
-        content = await fetchRedditContent(url);
-      } else if (url.match(/^https?:\/\/github\.com\/[^/]+\/[^/]+$/)) {
-        // --- GitHub Repo → Fetch README.md ---
-        content = await fetchGitHubReadme(url);
+
+        if (content) {
+          await env.DB.prepare(
+            "UPDATE articles SET content = ? WHERE id = ?"
+          ).bind(content, articleId).run();
+          console.log(`✅ Scraped content for ${url} (${content.length} chars)`);
+        }
       } else {
-        // --- Other sites → HTMLRewriter ---
-        content = await extractArticleContent(url, env);
+        console.log(`✨ Reusing existing content for "${title} (${content.length} chars)"`);
       }
 
       if (content) {
-        await env.DB.prepare(
-          "UPDATE articles SET content = ? WHERE id = ?"
-        ).bind(content, articleId).run();
-        console.log(`✅ Scraped content for ${url} (${content.length} chars)`);
-
         // ── AI Summarize ──────────────────────────────────
         // Gọi ngay sau khi có content, nếu lỗi thì bỏ qua
         try {

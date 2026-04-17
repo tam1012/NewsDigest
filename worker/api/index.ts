@@ -407,13 +407,17 @@ app.post('/api/articles/enqueue-scrape', async (c) => {
         enqueued += batch.length;
     }
 
-    // Enqueue Reddit articles with 7 seconds delay between each (100 req/10 mins limit)
-    for (let i = 0; i < redditArticles.length; i++) {
-        await c.env.CONTENT_QUEUE.send(
-            { articleId: redditArticles[i].id, url: redditArticles[i].url, title: redditArticles[i].title },
-            { delaySeconds: i * 7 }
+    // Enqueue Reddit articles with staggered delays (7s apart) using sendBatch
+    // sendBatch supports per-message delaySeconds → giảm N subrequests xuống còn ceil(N/100)
+    for (let i = 0; i < redditArticles.length; i += 100) {
+        const chunk = redditArticles.slice(i, i + 100);
+        await c.env.CONTENT_QUEUE.sendBatch(
+            chunk.map((a, j) => ({
+                body: { articleId: a.id, url: a.url, title: a.title },
+                delaySeconds: (i + j) * 7,
+            }))
         );
-        enqueued++;
+        enqueued += chunk.length;
     }
 
     return c.json({ ok: true, enqueued, message: `Enqueued ${enqueued} articles for content scraping` });
@@ -734,56 +738,6 @@ app.post('/api/sources/:id/fetch', async (c) => {
     } catch (e: any) {
         return c.json({ error: e.message }, 500);
     }
-});
-
-/**
- * POST /api/sources/fetch-all
- * Fetch bài mới từ TẤT CẢ sources đang enabled.
- * Dùng cho Dify agent để giảm số lượng API calls.
- */
-app.post('/api/sources/fetch-all', async (c) => {
-    const authErr = requireAdmin(c);
-    if (authErr) return authErr;
-
-    const { results: sources } = await c.env.DB.prepare('SELECT * FROM sources WHERE enabled = 1').all();
-    if (!sources || sources.length === 0) return c.json({ ok: true, results: [], message: 'No enabled sources' });
-
-    const { fetchSource } = await import('../cron/scraper');
-    const fetchResults = [];
-
-    for (const source of sources) {
-        const src = source as any;
-        try {
-            const articles = await fetchSource(src, c.env);
-            let insertedCount = 0;
-            for (const art of articles) {
-                const aId = crypto.randomUUID();
-                const result = await c.env.DB.prepare(
-                    `INSERT OR IGNORE INTO articles (id, source_id, url, title, description, published_at)
-                     VALUES (?, ?, ?, ?, ?, ?)`
-                ).bind(aId, src.id, art.url, art.title, art.description || '', normalizeDate(art.published_at)).run();
-                if (result.meta && result.meta.changes > 0) insertedCount++;
-            }
-            const lastFetchedAt = new Date().toISOString();
-            await c.env.DB.prepare(
-              'UPDATE sources SET last_fetched_at = ? WHERE id = ?'
-            ).bind(lastFetchedAt, src.id).run();
-
-            fetchResults.push({
-              source_id: src.id,
-              name: src.name,
-              fetched: articles.length,
-              inserted: insertedCount,
-              last_fetched_at: lastFetchedAt
-            });
-        } catch (e: any) {
-            fetchResults.push({ source_id: src.id, name: src.name, error: e.message });
-        }
-    }
-
-    const totalFetched = fetchResults.reduce((sum, r) => sum + (r.fetched || 0), 0);
-    const totalInserted = fetchResults.reduce((sum, r) => sum + (r.inserted || 0), 0);
-    return c.json({ ok: true, total_fetched: totalFetched, total_inserted: totalInserted, results: fetchResults });
 });
 
 

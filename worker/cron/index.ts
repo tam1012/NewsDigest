@@ -141,10 +141,16 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
         );
       }
 
-      // Stagger Reddit articles with 7 seconds delay (100 req/10 mins limit)
-      for (const a of redditArticles) {
-        await env.CONTENT_QUEUE.send(a, { delaySeconds: redditDelayCounter * 7 });
-        redditDelayCounter++;
+      // Stagger Reddit articles with 7 seconds delay using sendBatch (per-message delay)
+      // sendBatch hỗ trợ delaySeconds per-message → giảm N subrequests xuống 1
+      if (redditArticles.length > 0) {
+        await env.CONTENT_QUEUE.sendBatch(
+          redditArticles.map((a, j) => ({
+            body: a,
+            delaySeconds: (redditDelayCounter + j) * 7,
+          }))
+        );
+        redditDelayCounter += redditArticles.length;
       }
     }
 

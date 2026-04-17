@@ -398,7 +398,7 @@ export async function summarizeArticle(
   content: string,
   env: Env,
 ): Promise<SummaryResult | null> {
-  const truncated = content.length > 3000 ? content.slice(0, 3000) + '...' : content;
+  const truncated = content.length > 15000 ? content.slice(0, 15000) + '...' : content;
   const userPrompt = `Tiêu đề: ${title}\n\nNội dung:\n${truncated}`;
 
   // ── Try JSON mode (with retry) ──

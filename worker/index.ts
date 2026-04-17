@@ -2,6 +2,7 @@ import { Env, ContentScrapeMessage } from './types';
 import { scheduled } from './cron/index';
 import { scheduledDigest } from './cron/digest';
 import { retryFailedArticles } from './cron/retry-failed';
+import { cleanOldContent } from './cron/cleanup';
 import { handleContentQueue } from './queue/content-scraper';
 
 export default {
@@ -25,6 +26,9 @@ export default {
     // Chỉ tạo/cập nhật digest cho cron general, không cần cho github-trending
     if (!isGitHubTrendingCron) {
       await scheduledDigest(env);
+    } else {
+      // Cron daily (github-trending) chạy 1 lần lúc 01:00 UTC -> Kèm luôn job dọn rác 7 ngày
+      await cleanOldContent(env);
     }
   },
   async queue(batch: MessageBatch<ContentScrapeMessage>, env: Env, ctx: ExecutionContext): Promise<void> {

@@ -11,7 +11,7 @@
   import { sources } from '$lib/stores/sources'
   import type { Source } from '$lib/types'
   import { toast } from 'svelte-sonner'
-  import { ArrowLeft, Loader2, Lock, LockOpen, RefreshCw } from 'lucide-svelte'
+  import { ArrowLeft, Lock, LockOpen } from 'lucide-svelte'
 
   import SourceItem from './components/SourceItem.svelte'
   import SourceDeleteDialog from './components/SourceDeleteDialog.svelte'
@@ -29,7 +29,6 @@
   let newName = $state('')
 
   let isAdding = $state(false)
-  let isFetchingAll = $state(false)
   let fetchingSourceId = $state<string | null>(null)
   let togglingIds = $state<string[]>([])
 
@@ -328,43 +327,6 @@
     }
   }
 
-  async function fetchAllSources() {
-    isFetchingAll = true
-    authError = ''
-    const toastId = toast.loading('Đang fetch tất cả nguồn...')
-
-    try {
-      const res = await fetch(api('/api/sources/fetch-all'), {
-        method: 'POST',
-        headers: adminHeaders(adminKey),
-      })
-
-      if (res.status === 401) {
-        toast.dismiss(toastId)
-        handleUnauthorized()
-        return
-      }
-
-      const result = await res.json()
-      if (!res.ok || !result.ok) {
-        throw new Error(result.error || 'Fetch thất bại.')
-      }
-
-      const failed = (result.results ?? []).filter(
-        (item: { error?: string }) => item.error,
-      ).length
-      toast.success(
-        `Fetch ${result.total_fetched ?? 0} bài, +${result.total_inserted ?? 0} mới${failed ? `, ${failed} lỗi` : ''}.`,
-        { id: toastId },
-      )
-      await fetchSources()
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Fetch thất bại.'
-      toast.error(message, { id: toastId })
-    } finally {
-      isFetchingAll = false
-    }
-  }
 </script>
 
 <svelte:head>
@@ -433,21 +395,6 @@
           </p>
         </div>
 
-        {#if isAuthed}
-          <CusButton
-            class="h-9 px-4 text-sm shrink-0"
-            disabled={isFetchingAll}
-            onclick={fetchAllSources}
-          >
-            {#if isFetchingAll}
-              <Loader2 size={14} class="animate-spin mr-1.5" />
-              <span>Đang fetch...</span>
-            {:else}
-              <RefreshCw size={14} class="mr-1.5" />
-              <span>Fetch tất cả</span>
-            {/if}
-          </CusButton>
-        {/if}
       </div>
     </header>
 

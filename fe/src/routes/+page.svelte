@@ -267,13 +267,28 @@
   // State to track scroll preservation
   let lastScrollInfo = $state({ articleId: null as string | null })
 
+  // ── OverlayScrollbars refs (desktop) ──────────────────────────
+  // asideScrollbar = left panel (article list / digest)
+  // mainScrollbar  = right panel (article content)
+  let asideScrollbar: ReturnType<typeof OverlayScrollbarsComponent> | undefined =
+    $state()
+  let mainScrollbar: ReturnType<typeof OverlayScrollbarsComponent> | undefined =
+    $state()
+
+  /** Scroll an OverlayScrollbarsComponent viewport to the top instantly. */
+  function scrollToTop(
+    ref: ReturnType<typeof OverlayScrollbarsComponent> | undefined,
+  ) {
+    ref?.osInstance()?.elements().viewport.scrollTo({ top: 0, behavior: 'instant' })
+  }
+
   // automatically select the first article when articles load on desktop
   let innerWidth = $state(
     typeof window !== 'undefined' ? window.innerWidth : 1024,
   )
   let mobileMode = $derived(innerWidth < 768)
 
-  // Effect to scroll to top when selectedArticle changes (desktop only)
+  // Effect to scroll main panel to top when selectedArticle changes (desktop only)
   $effect(() => {
     const article = selectedArticle
     const isMobile = mobileMode
@@ -283,14 +298,7 @@
         untrack(() => {
           lastScrollInfo = { articleId: article.id }
         })
-        tick().then(() => {
-          const viewport = document.querySelectorAll(
-            '[data-overlayscrollbars-viewport]',
-          )[0] as HTMLElement | undefined
-          if (viewport) {
-            viewport.scrollTo({ top: 0, behavior: 'instant' })
-          }
-        })
+        tick().then(() => scrollToTop(mainScrollbar))
       }
     }
   })
@@ -317,14 +325,11 @@
             sideView = 'list'
             selectedArticle = null
           }
-          // Reset scroll for both aside (VP1) and main (VP0) when date changes (desktop only)
+          // Reset scroll for both panels when date changes (desktop only)
           if (!mobileMode) {
             tick().then(() => {
-              const viewports = document.querySelectorAll(
-                '[data-overlayscrollbars-viewport]',
-              )
-              viewports[0]?.scrollTo({ top: 0, behavior: 'instant' })
-              viewports[1]?.scrollTo({ top: 0, behavior: 'instant' })
+              scrollToTop(mainScrollbar)
+              scrollToTop(asideScrollbar)
             })
           }
         }
@@ -776,12 +781,7 @@
           <CusButton
             onclick={() => {
               sideView = sideView === 'digest' ? 'list' : 'digest'
-              tick().then(() => {
-                const viewports = document.querySelectorAll(
-                  '[data-overlayscrollbars-viewport]',
-                )
-                viewports[1]?.scrollTo({ top: 0, behavior: 'instant' })
-              })
+              tick().then(() => scrollToTop(asideScrollbar))
             }}
             class="size-8"
           >
@@ -852,6 +852,7 @@
       ></div>
       <!-- Aside Content: Digest or Article List -->
       <OverlayScrollbarsComponent
+        bind:this={asideScrollbar}
         defer
         options={{ scrollbars: { autoHide: 'leave', autoHideDelay: 300 } }}
         class="px-6 py-20"
@@ -976,6 +977,7 @@
       </OverlayScrollbarsComponent>
     </aside>
     <OverlayScrollbarsComponent
+      bind:this={mainScrollbar}
       element="main"
       defer
       options={{ scrollbars: { autoHide: 'leave', autoHideDelay: 300 } }}
