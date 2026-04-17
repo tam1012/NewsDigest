@@ -42,8 +42,23 @@ function isCacheable(request, response) {
 // ── Install ──────────────────────────────────────────────
 
 self.addEventListener('install', (event) => {
-  // Skip waiting so new SW activates immediately without requiring a tab reload
-  self.skipWaiting();
+  // Precache the HTML shell immediately on install.
+  // This ensures the app works offline after the very first online visit,
+  // without requiring a second navigation to trigger runtime caching.
+  event.waitUntil(
+    caches.open(SHELL_CACHE).then((cache) =>
+      // Fetch and store the root shell. Use cache:'reload' to bypass any
+      // browser HTTP cache so we always get a fresh copy from the server.
+      fetch('/', { cache: 'reload' })
+        .then((response) => {
+          if (response.ok) return cache.put('/', response);
+        })
+        .catch(() => {
+          // SW installed while offline — fine, runtime caching will fill the gap
+          // when the user is next online.
+        })
+    ).then(() => self.skipWaiting())
+  );
 });
 
 // ── Activate ─────────────────────────────────────────────
