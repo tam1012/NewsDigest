@@ -1,6 +1,6 @@
 import { Env, ContentScrapeMessage } from '../types';
 import { extractArticleContent } from '../cron/scraper';
-import { summarizeArticle } from '../ai/summarizer';
+import { summarizeArticle, ProhibitedContentError } from '../ai/summarizer';
 
 const MAX_CHARS = 25000;
 const RAPIDAPI_TRANSCRIPT_HOST = 'yt-api.p.rapidapi.com';
@@ -296,7 +296,7 @@ export async function handleContentQueue(
           }
         } else if (url.includes('reddit.com')) {
           // --- Reddit → Public JSON ---
-          await new Promise(r => setTimeout(r, 2000));
+          await new Promise(r => setTimeout(r, 10000));
           content = await fetchRedditContent(url);
         } else if (url.match(/^https?:\/\/github\.com\/[^/]+\/[^/]+$/)) {
           // --- GitHub Repo → Fetch README.md ---
@@ -328,7 +328,15 @@ export async function handleContentQueue(
             console.log(`🤖 AI: "${title}" → score=${aiResult.hot_score} tags=${aiResult.tags.join(',')}`);
           }
         } catch (aiErr: any) {
-          console.log(`⚠️ AI summarize skipped for "${title}": ${aiErr.message}`);
+          if (aiErr instanceof ProhibitedContentError) {
+            // Content permanently blocked by safety filters → mark with placeholder so it's not retried
+            await env.DB.prepare(
+              "UPDATE articles SET summary = '[blocked]', hot_score = 0, content = NULL WHERE id = ?"
+            ).bind(articleId).run();
+            console.log(`🚫 AI blocked "${title}": ${aiErr.message} — marked as [blocked]`);
+          } else {
+            console.log(`⚠️ AI summarize skipped for "${title}": ${aiErr.message}`);
+          }
         }
       } else {
         console.log(`⚠️ No content extracted for ${url}`);
@@ -338,7 +346,15 @@ export async function handleContentQueue(
     } catch (err: any) {
       console.error(`❌ Failed to scrape ${url}:`, err);
       if (err.message && err.message.includes('429')) {
-        message.retry({ delaySeconds: 30 });
+        // Reddit aggressively rate-limits CF Workers — use longer delay
+        const isReddit = url.includes('reddit.com');
+        if (isReddit) {
+          // Set a user-facing message so FE doesn't show generic "Đang xử lý..."
+          await env.DB.prepare(
+            "UPDATE articles SET description_vn = ? WHERE id = ? AND description_vn IS NULL"
+          ).bind('⏳ Reddit đang giới hạn truy cập — nội dung sẽ được cập nhật sau.', articleId).run();
+        }
+        message.retry({ delaySeconds: isReddit ? 120 : 30 });
       } else {
         message.retry();
       }

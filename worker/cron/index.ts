@@ -141,13 +141,13 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
         );
       }
 
-      // Stagger Reddit articles with 7 seconds delay using sendBatch (per-message delay)
+      // Stagger Reddit articles with 15 seconds delay using sendBatch (per-message delay)
       // sendBatch hỗ trợ delaySeconds per-message → giảm N subrequests xuống 1
       if (redditArticles.length > 0) {
         await env.CONTENT_QUEUE.sendBatch(
           redditArticles.map((a, j) => ({
             body: a,
-            delaySeconds: (redditDelayCounter + j) * 7,
+            delaySeconds: (redditDelayCounter + j) * 15,
           }))
         );
         redditDelayCounter += redditArticles.length;
@@ -184,7 +184,7 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
 
   // ── 2. Reddit: xử lý tuần tự, delay 10s giữa mỗi subreddit ─────────────
   // Reddit rate-limit từ Cloudflare edge IPs → cào đồng thời nhiều /r sẽ bị block
-  const REDDIT_STAGGER_MS = 10_000;
+  const REDDIT_STAGGER_MS = 15_000;
 
   for (let i = 0; i < redditSources.length; i++) {
     const source = redditSources[i];

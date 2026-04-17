@@ -407,14 +407,14 @@ app.post('/api/articles/enqueue-scrape', async (c) => {
         enqueued += batch.length;
     }
 
-    // Enqueue Reddit articles with staggered delays (7s apart) using sendBatch
+    // Enqueue Reddit articles with staggered delays (15s apart) using sendBatch
     // sendBatch supports per-message delaySeconds → giảm N subrequests xuống còn ceil(N/100)
     for (let i = 0; i < redditArticles.length; i += 100) {
         const chunk = redditArticles.slice(i, i + 100);
         await c.env.CONTENT_QUEUE.sendBatch(
             chunk.map((a, j) => ({
                 body: { articleId: a.id, url: a.url, title: a.title },
-                delaySeconds: (i + j) * 7,
+                delaySeconds: (i + j) * 15,
             }))
         );
         enqueued += chunk.length;

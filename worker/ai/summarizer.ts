@@ -1,5 +1,13 @@
 import { Env } from '../types';
 
+/** Thrown when Gemini blocks content as prohibited — should NOT be retried. */
+export class ProhibitedContentError extends Error {
+  constructor(reason: string) {
+    super(`AI content blocked: ${reason}`);
+    this.name = 'ProhibitedContentError';
+  }
+}
+
 export interface SummaryResult {
   description_vn: string;
   summary: string;
@@ -216,6 +224,13 @@ async function callGemini(
   }
 
   const data: any = await res.json();
+
+  // Detect content blocked by safety filters — no point retrying
+  const blockReason = data?.promptFeedback?.blockReason;
+  if (blockReason) {
+    throw new ProhibitedContentError(blockReason);
+  }
+
   const text = extractResponseText(data);
   if (!text) throw new Error('Empty AI response');
   return text;
@@ -258,6 +273,13 @@ async function callGeminiPlainText(
   }
 
   const data: any = await res.json();
+
+  // Detect content blocked by safety filters — no point retrying
+  const blockReason = data?.promptFeedback?.blockReason;
+  if (blockReason) {
+    throw new ProhibitedContentError(blockReason);
+  }
+
   const text = extractResponseText(data);
   if (!text) throw new Error(`Empty ${model} response`);
   return text.trim();
@@ -311,6 +333,8 @@ async function callGeminiWithJsonRetry<T>(
       if (attempt > 1) console.log(`✅ JSON valid on attempt ${attempt}`);
       return result;
     } catch (err: any) {
+      // Content blocked by safety filters → no point retrying
+      if (err instanceof ProhibitedContentError) throw err;
       lastError = err;
       console.log(`⚠️ Attempt ${attempt}/${MAX_RETRIES} [${model}] failed: ${err.message}`);
       if (attempt < MAX_RETRIES) {
@@ -414,6 +438,8 @@ export async function summarizeArticle(
     result.tags = result.tags.slice(0, 3).map(String);
     return result;
   } catch (primaryErr: any) {
+    // Content permanently blocked — don't waste API calls on fallback
+    if (primaryErr instanceof ProhibitedContentError) throw primaryErr;
     console.log(`⚠️ JSON mode failed for "${title}": ${primaryErr.message}`);
     console.log(`🔄 Switching to multi-step plain text fallback...`);
   }

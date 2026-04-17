@@ -78,7 +78,7 @@ export async function retryFailedArticles(env: Env): Promise<void> {
 
     let redditDelay = 0;
     for (const a of redditArticles) {
-      await env.CONTENT_QUEUE.send(a, { delaySeconds: redditDelay * 7 });
+      await env.CONTENT_QUEUE.send(a, { delaySeconds: redditDelay * 15 });
       redditDelay++;
     }
     if (redditArticles.length > 0) {
