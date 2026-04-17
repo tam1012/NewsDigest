@@ -164,7 +164,8 @@
     const wrapper = document.querySelector('.ptr-wrapper')
     if (!wrapper) return
 
-    const onTouchMove: EventListener = (event) => handleTouchMove(event as TouchEvent)
+    const onTouchMove: EventListener = (event) =>
+      handleTouchMove(event as TouchEvent)
     wrapper.addEventListener('touchmove', onTouchMove, { passive: true })
 
     return () => {
@@ -228,7 +229,7 @@
 
   .ptr-indicator {
     position: fixed;
-    top: 12px;
+    top: 2rem;
     left: 0;
     right: 0;
     display: flex;

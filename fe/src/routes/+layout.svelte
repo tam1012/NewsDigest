@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { prefs } from '$lib/stores/prefs'
-  import { Toaster } from '$lib/components/ui/sonner'
+  import { Toaster } from 'svelte-sonner'
   import '../app.css'
   import 'overlayscrollbars/overlayscrollbars.css'
   import { useOverlayScrollbars } from 'overlayscrollbars-svelte'
@@ -10,6 +10,7 @@
   let { children }: { children: Snippet } = $props()
 
   let mounted = $state(false)
+  let isOnline = $state(true)
 
   const [initBodyScrollbars] = useOverlayScrollbars({
     defer: true,
@@ -20,11 +21,36 @@
 
   onMount(() => {
     mounted = true
+    isOnline = navigator.onLine
 
     initBodyScrollbars({
       target: document.body,
       cancel: { body: false },
     })
+
+    // ── Service Worker registration ──────────────────────
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker
+        .register('/sw.js', { scope: '/' })
+        .catch((err) => {
+          console.warn('[SW] Registration failed:', err)
+        })
+    }
+
+    // ── Online / Offline events ──────────────────────────
+    function handleOnline() {
+      isOnline = true
+    }
+    function handleOffline() {
+      isOnline = false
+    }
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
   })
 
   $effect(() => {
@@ -62,5 +88,18 @@
   class="min-h-screen bg-bg-1 sm:bg-linear-to-r sm:from-bg-1 sm:from-65% sm:to-bg-2 sm:to-65%"
 >
   <Toaster richColors position="top-right" />
+
+  <!-- Offline indicator -->
+  {#if mounted && !isOnline}<div
+      id="offline-banner"
+      class="fixed top-1 left-1/2 md:top-auto md:bottom-0 md:inset-x-0 md:translate-x-0 z-9999 flex -translate-x-1/2 items-center justify-center rounded-full overflow-hidden h-7 w-20 md:rounded-none md:w-full text-xs font-medium"
+    >
+      <span
+        class="text-amber-600 bg-gray-200/80 flex items-center justify-center w-full h-full backdrop-blur-md"
+      >
+        ⚡ Offline
+      </span>
+    </div>{/if}
+
   {@render children()}
 </div>

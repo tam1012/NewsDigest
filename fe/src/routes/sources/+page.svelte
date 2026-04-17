@@ -8,7 +8,6 @@
     saveAdminKey,
   } from '$lib/admin'
   import CusButton from '$lib/components/ui/CusButton.svelte'
-  import { Input } from '$lib/components/ui/input'
   import { sources } from '$lib/stores/sources'
   import type { Source } from '$lib/types'
   import { toast } from 'svelte-sonner'
@@ -24,7 +23,7 @@
   import SourceDeleteDialog from './components/SourceDeleteDialog.svelte'
   import SourceEditDialog from './components/SourceEditDialog.svelte'
   import AddSourceForm from './components/AddSourceForm.svelte'
-  import { formatRelativeTime, getTypeIcon, type SourcePreview } from './components/utils'
+  import { formatRelativeTime, getTypeIcon } from './components/utils'
 
   let loading = $state(true)
   let pageError = $state('')
@@ -36,13 +35,9 @@
   let newName = $state('')
 
   let isAdding = $state(false)
-  let isResolving = $state(false)
   let isFetchingAll = $state(false)
   let fetchingSourceId = $state<string | null>(null)
   let togglingIds = $state<string[]>([])
-  let previewError = $state('')
-  let preview = $state<SourcePreview | null>(null)
-  let lastPreviewInput = $state('')
 
   let deleteDialogOpen = $state(false)
   let deletingSource = $state<Source | null>(null)
@@ -68,18 +63,7 @@
     fetchSources()
   })
 
-  $effect(() => {
-    const normalizedUrl = newUrl.trim()
-    if (normalizedUrl !== lastPreviewInput) {
-      if (!normalizedUrl) {
-        preview = null
-      } else if (preview && preview.requested_url !== normalizedUrl) {
-        preview = null
-      }
-      previewError = ''
-      lastPreviewInput = normalizedUrl
-    }
-  })
+
 
   function normalizeSource(source: Record<string, unknown>): Source {
     return source as unknown as Source
@@ -196,49 +180,7 @@
     toast.message('Đã đăng xuất.')
   }
 
-  async function resolvePreviewUrl(url: string) {
-    isResolving = true
-    previewError = ''
-    authError = ''
 
-    try {
-      const res = await fetch(api('/api/sources/resolve'), {
-        method: 'POST',
-        headers: adminHeaders(adminKey),
-        body: JSON.stringify({ url }),
-      })
-
-      if (res.status === 401) {
-        handleUnauthorized()
-        return null
-      }
-
-      const data = await res.json()
-      if (!res.ok || !data.ok) {
-        const message = data.error || 'Không thể phân tích URL.'
-        previewError = message
-        toast.error(message)
-        return null
-      }
-
-      preview = { ...data, requested_url: url }
-      return preview
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Không thể phân tích URL.'
-      previewError = message
-      toast.error(message)
-      return null
-    } finally {
-      isResolving = false
-    }
-  }
-
-  async function handlePreview() {
-    const normalizedUrl = newUrl.trim()
-    if (!normalizedUrl) return
-    await resolvePreviewUrl(normalizedUrl)
-  }
 
   async function addSource() {
     const normalizedUrl = newUrl.trim()
@@ -248,15 +190,6 @@
     authError = ''
 
     try {
-      let currentPreview = preview
-      if (!currentPreview || currentPreview.requested_url !== normalizedUrl) {
-        currentPreview = await resolvePreviewUrl(normalizedUrl)
-        if (!currentPreview) {
-          isAdding = false
-          return
-        }
-      }
-
       const res = await fetch(api('/api/sources'), {
         method: 'POST',
         headers: adminHeaders(adminKey),
@@ -279,8 +212,6 @@
       toast.success(`Đã thêm "${result.source.name}".`)
       newUrl = ''
       newName = ''
-      preview = null
-      previewError = ''
 
       await fetchSources()
     } catch (error) {
@@ -478,11 +409,12 @@
               onsubmit={saveAdminKeyFromForm}
               class="flex items-center gap-2"
             >
-              <Input
+              <!-- svelte-ignore a11y_autofocus -->
+              <input
                 type="password"
                 name="admin_key"
                 placeholder="Admin key..."
-                class="h-8 w-40 text-xs rounded-full border-border bg-transparent px-3"
+                class="h-8 w-40 text-xs rounded-full border border-border bg-transparent px-3 outline-none focus-visible:ring-2 focus-visible:ring-text-main/10 placeholder:text-text-secondary/60 disabled:cursor-not-allowed disabled:opacity-50"
                 autofocus
               />
               <CusButton class="h-8 px-3 text-xs" type="submit">Lưu</CusButton>
@@ -546,11 +478,7 @@
       <AddSourceForm
         bind:newUrl
         bind:newName
-        {isResolving}
         {isAdding}
-        {preview}
-        {previewError}
-        onPreview={handlePreview}
         onAdd={addSource}
       />
     {/if}

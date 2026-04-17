@@ -1,9 +1,8 @@
 <script lang="ts">
-  import * as Dialog from '$lib/components/ui/dialog/index.js'
-  import { Input } from '$lib/components/ui/input'
-  import { Label } from '$lib/components/ui/label'
+  import { Dialog } from 'bits-ui'
   import CusButton from '$lib/components/ui/CusButton.svelte'
   import { Loader2, Pencil } from 'lucide-svelte'
+  import { slideScaleFade, fadeOnly } from '$lib/transitions/slideScaleFade'
 
   let {
     open = $bindable(false),
@@ -46,43 +45,61 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="sm:max-w-[480px]">
-    <Dialog.Header>
-      <Dialog.Title class="text-lg font-semibold">Sửa nguồn tin</Dialog.Title>
-      <Dialog.Description class="text-sm text-text-secondary">
-        Cập nhật thông tin nguồn tin.
-      </Dialog.Description>
-    </Dialog.Header>
+  <Dialog.Portal>
+    <Dialog.Overlay forceMount>
+      {#snippet child({ props, open })}
+        {#if open}
+          <div {...props} transition:fadeOnly={{ duration: 150 }} class="fixed inset-0 z-50 bg-black/80"></div>
+        {/if}
+      {/snippet}
+    </Dialog.Overlay>
 
-    <div class="mt-4 flex flex-col gap-4">
-      <div class="flex flex-col gap-1.5">
-        <Label for="edit-name">Tên nguồn</Label>
-        <Input
-          id="edit-name"
-          bind:value={editName}
-          placeholder="Tên nguồn tin"
-          class="h-10 rounded-xl border-border/60 bg-transparent px-3.5 text-sm"
-        />
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0 pointer-events-none">
+      <Dialog.Content forceMount>
+        {#snippet child({ props, open })}
+          {#if open}
+            <div 
+              {...props} 
+              in:slideScaleFade={{ duration: 250, startScale: 0.95 }}
+              out:fadeOnly={{ duration: 150 }}
+              class="grid w-full gap-4 border border-border/60 bg-bg-btn p-6 shadow-lg rounded-3xl sm:max-w-[480px] outline-none pointer-events-auto"
+            >
+              <div class="flex flex-col space-y-1.5 text-center sm:text-left">
+        <Dialog.Title class="text-lg font-semibold tracking-tight">Sửa nguồn tin</Dialog.Title>
+        <Dialog.Description class="text-sm text-text-secondary">
+          Cập nhật thông tin nguồn tin.
+        </Dialog.Description>
       </div>
 
-      <div class="flex flex-col gap-1.5">
-        <Label for="edit-url">URL</Label>
-        <Input
-          id="edit-url"
-          bind:value={editUrl}
-          placeholder="URL nguồn tin"
-          class="h-10 rounded-xl border-border/60 bg-transparent px-3.5 text-sm"
-        />
-      </div>
-    </div>
+      <div class="mt-4 flex flex-col gap-4">
+        <div class="flex flex-col gap-1.5">
+          <label for="edit-name" class="text-sm font-medium leading-none">Tên nguồn</label>
+          <input
+            id="edit-name"
+            bind:value={editName}
+            placeholder="Tên nguồn tin"
+            class="h-10 rounded-xl border border-border/60 bg-transparent px-3.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-text-main/10 placeholder:text-text-secondary/60 disabled:cursor-not-allowed disabled:opacity-50"
+          />
+        </div>
 
-    <div class="mt-5 flex justify-end gap-2">
-      <CusButton class="h-9 px-4 text-sm" onclick={onCancel}>Hủy</CusButton>
-      <CusButton
-        class="h-9 px-4 text-sm"
-        disabled={isEditing || !editName.trim() || !editUrl.trim()}
-        onclick={onSave}
-      >
+        <div class="flex flex-col gap-1.5">
+          <label for="edit-url" class="text-sm font-medium leading-none">URL</label>
+          <input
+            id="edit-url"
+            bind:value={editUrl}
+            placeholder="URL nguồn tin"
+            class="h-10 rounded-xl border border-border/60 bg-transparent px-3.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-text-main/10 placeholder:text-text-secondary/60 disabled:cursor-not-allowed disabled:opacity-50"
+          />
+        </div>
+      </div>
+
+      <div class="mt-5 flex justify-end gap-2">
+        <CusButton class="h-9 px-4 text-sm" onclick={onCancel}>Hủy</CusButton>
+        <CusButton
+          class="h-9 px-4 text-sm"
+          disabled={isEditing || !editName.trim() || !editUrl.trim()}
+          onclick={onSave}
+        >
         {#if isEditing}
           <Loader2 size={14} class="animate-spin mr-1.5" />
         {:else}
@@ -91,5 +108,10 @@
         {isEditing ? 'Đang lưu...' : 'Lưu thay đổi'}
       </CusButton>
     </div>
-  </Dialog.Content>
+            </div>
+          {/if}
+        {/snippet}
+      </Dialog.Content>
+    </div>
+  </Dialog.Portal>
 </Dialog.Root>
