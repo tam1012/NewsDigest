@@ -28,15 +28,6 @@
       cancel: { body: false },
     })
 
-    // ── Service Worker registration ──────────────────────
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker
-        .register('/sw.js', { scope: '/' })
-        .catch((err) => {
-          console.warn('[SW] Registration failed:', err)
-        })
-    }
-
     // ── Online / Offline events ──────────────────────────
     function handleOnline() {
       isOnline = true
