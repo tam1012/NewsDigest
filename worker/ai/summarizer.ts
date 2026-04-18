@@ -244,6 +244,7 @@ async function callGeminiPlainText(
   userPrompt: string,
   model: string = pickModel(),
   timeoutMs = 60000,
+  attempt = 1,
 ): Promise<string> {
   const url = `${env.AI_GATEWAY_URL}/v1beta/models/${model}:generateContent`;
 
@@ -266,6 +267,16 @@ async function callGeminiPlainText(
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(timeoutMs),
   });
+
+  // Rate-limited → switch to the other model and retry (same as callGemini)
+  if (res.status === 429) {
+    if (attempt >= MAX_RETRIES) throw new Error(`${model} rate limit (429) after max retries`);
+    const nextModel = getOtherModel(model);
+    const wait = attempt * 2000;
+    console.log(`⏳ [plaintext] ${model} 429 — switching to ${nextModel}, waiting ${wait / 1000}s (retry ${attempt + 1}/${MAX_RETRIES})`);
+    await new Promise(r => setTimeout(r, wait));
+    return callGeminiPlainText(env, systemPrompt, userPrompt, nextModel, timeoutMs, attempt + 1);
+  }
 
   if (!res.ok) {
     const err = await res.text().catch(() => '');
@@ -448,6 +459,8 @@ export async function summarizeArticle(
   try {
     return await summarizeArticleFallback(title, truncated, env);
   } catch (fallbackErr: any) {
+    // Content permanently blocked — propagate immediately, no more retries
+    if (fallbackErr instanceof ProhibitedContentError) throw fallbackErr;
     console.error(`❌ All strategies failed for "${title}": ${fallbackErr.message}`);
     throw fallbackErr;
   }

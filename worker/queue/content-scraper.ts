@@ -352,7 +352,7 @@ export async function handleContentQueue(
           // Set a user-facing message so FE doesn't show generic "Đang xử lý..."
           await env.DB.prepare(
             "UPDATE articles SET description_vn = ? WHERE id = ? AND description_vn IS NULL"
-          ).bind('⏳ Reddit đang giới hạn truy cập — nội dung sẽ được cập nhật sau.', articleId).run();
+          ).bind('⏳ Reddit rate-limited - updating later.', articleId).run();
         }
         message.retry({ delaySeconds: isReddit ? 120 : 30 });
       } else {
