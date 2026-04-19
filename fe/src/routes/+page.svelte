@@ -231,24 +231,28 @@
     if (!digest?.summary_text) return []
     const matches = [...digest.summary_text.matchAll(/<id:([a-f0-9-]+)>/gi)]
     const seen = new Set<string>()
-    return matches.map(m => m[1]).filter(id => {
-      if (seen.has(id)) return false
-      seen.add(id)
-      return true
-    })
+    return matches
+      .map((m) => m[1])
+      .filter((id) => {
+        if (seen.has(id)) return false
+        seen.add(id)
+        return true
+      })
   })
 
   // Articles present in the digest, ordered by their appearance in the digest text
   let digestArticles = $derived.by(() => {
-    const map = new Map(articles.map(a => [a.id, a]))
-    return digestArticleIds.filter(id => map.has(id)).map(id => map.get(id)!)
+    const map = new Map(articles.map((a) => [a.id, a]))
+    return digestArticleIds
+      .filter((id) => map.has(id))
+      .map((id) => map.get(id)!)
   })
 
   let sideView = $state<'list' | 'digest'>('list')
 
   // Navigation list: digest articles when viewing digest, filtered articles otherwise
   let navArticles = $derived(
-    sideView === 'digest' ? digestArticles : filteredArticles
+    sideView === 'digest' ? digestArticles : filteredArticles,
   )
 
   let selectedArticle: Article | null = $state(null)
@@ -316,9 +320,10 @@
         }
       })
     }
-    untrack(() => { prevHadFilter = active })
+    untrack(() => {
+      prevHadFilter = active
+    })
   })
-
 
   // State to track scroll preservation
   let lastScrollInfo = $state({ articleId: null as string | null })
@@ -486,14 +491,14 @@
         ? 'none'
         : 'auto'}; transition: opacity 0.2s ease;"
     >
-      <div class="flex gap-3">
-        <CusButton onclick={() => goToDate(-1)} class="size-10">
+      <div class="flex gap-2">
+        <CusButton onclick={() => goToDate(-1)} class="size-12">
           <ChevronLeft class="-translate-x-px" size={20} />
         </CusButton>
         <!-- <CusButton class="h-10 w-24 text-sm">{formattedDate}</CusButton> -->
         <CusButton
           onclick={() => !isToday && goToDate(1)}
-          class="size-10"
+          class="size-12"
           disabled={isToday}
         >
           <div
@@ -504,11 +509,11 @@
           </div>
         </CusButton>
       </div>
-      <div class="flex gap-3">
+      <div class="flex gap-2">
         <!-- svelte-ignore a11y_consider_explicit_label -->
         <CusButton
           onclick={() => ($prefs.fontSize = cycleFontSize($prefs.fontSize))}
-          class="size-10"
+          class="size-12"
           title="Đổi cỡ chữ"
         >
           <CaseSensitive size={18} />
@@ -516,7 +521,7 @@
         <!-- svelte-ignore a11y_consider_explicit_label -->
         <CusButton
           onclick={() => ($prefs.darkMode = !$prefs.darkMode)}
-          class="size-10"
+          class="size-12"
         >
           <div class="grid place-items-center">
             {#if $prefs.darkMode}
@@ -574,13 +579,15 @@
         >
       </div>
     {/if}
-    <div class=" fixed z-40 flex gap-3 bottom-6 right-4">
+    <div
+      class=" fixed z-40 flex gap-2 justify-between bottom-0 px-8 pb-8 pt-4 w-full bg-linear-to-t from-bg-1 to-bg-1/0"
+    >
       {#if isAdmin && unsummarizedCount > 0 && !aiButtonHidden}
         <!-- svelte-ignore a11y_consider_explicit_label -->
         <CusButton
           onclick={handleResummarize}
           disabled={resummarizing}
-          class="size-10 px-2 text-xs gap-1"
+          class="size-12 px-2 text-xs gap-1"
         >
           {#if resummarizing}
             <Loader2 size={14} class="animate-spin" />
@@ -590,70 +597,14 @@
           <span>{resummarizing ? '...' : `AI (${unsummarizedCount})`}</span>
         </CusButton>
       {/if}
-      <!-- svelte-ignore a11y_consider_explicit_label -->
-      <CusButton
-        onclick={() => {
-          sideView = sideView === 'digest' ? 'list' : 'digest'
+      <CusButtonTab
+        value={sideView !== 'digest'}
+        onchange={(v) => {
+          sideView = v ? 'list' : 'digest'
         }}
-        class="size-10"
-      >
-        <div class="grid place-items-center">
-          {#if sideView === 'digest'}
-            <div
-              class="col-start-1 row-start-1"
-              in:slideScaleFade={{
-                duration: 250,
-                startScale: 0.5,
-                startOpacity: 0,
-              }}
-              out:slideScaleFade={{
-                duration: 200,
-                startScale: 0.5,
-                startOpacity: 0,
-              }}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-                class="size-5"
-              >
-                <path
-                  fill-rule="evenodd"
-                  d="M6 4.75A.75.75 0 0 1 6.75 4h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 4.75ZM6 10a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 10Zm0 5.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75ZM1.99 4.75a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 15.25a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 10a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1V10Z"
-                  clip-rule="evenodd"
-                />
-              </svg>
-            </div>
-          {:else}
-            <div
-              class="col-start-1 row-start-1"
-              in:slideScaleFade={{
-                duration: 250,
-                startScale: 0.5,
-                startOpacity: 0,
-              }}
-              out:slideScaleFade={{
-                duration: 200,
-                startScale: 0.5,
-                startOpacity: 0,
-              }}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-              >
-                <path
-                  fill="currentColor"
-                  d="M7.53 1.282a.5.5 0 0 1 .94 0l.478 1.306a7.5 7.5 0 0 0 4.464 4.464l1.305.478a.5.5 0 0 1 0 .94l-1.305.478a7.5 7.5 0 0 0-4.464 4.464l-.478 1.305a.5.5 0 0 1-.94 0l-.478-1.305a7.5 7.5 0 0 0-4.464-4.464L1.282 8.47a.5.5 0 0 1 0-.94l1.306-.478a7.5 7.5 0 0 0 4.464-4.464Z"
-                />
-              </svg>
-            </div>
-          {/if}
-        </div>
-      </CusButton>
+        tab1Label="News"
+        tab2Label="Digest"
+      />
 
       <SourceFilter {articles} size="md" />
     </div>
@@ -672,7 +623,7 @@
         >
         <CusButton
           onclick={clearFilters}
-          class="ml-auto size-10 sm:size-8  shrink-0"
+          class="ml-auto size-12 sm:size-8  shrink-0"
         >
           <X size={20} />
         </CusButton>

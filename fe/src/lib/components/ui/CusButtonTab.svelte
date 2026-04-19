@@ -46,17 +46,20 @@
 
 <button
   onclick={toggle}
-  class="relative h-8 inline-flex items-center rounded-full text-xs cursor-pointer"
+  class="relative h-12 md:h-8 text-sm md:text-xs inline-flex items-center rounded-full cursor-pointer"
 >
   <!-- Frosted background -->
   <span
-    class="absolute inset-y-0 -inset-x-0.5 bg-black/5 dark:bg-black/20 backdrop-blur-md rounded-full"
-  ></span>
+    class="absolute overflow-hidden flex border dark:border-white/10 border-white/50 justify-center items-center inset-y-0 -inset-x-0.75 rounded-full"
+  >
+    <span class="bg-black/5 w-40 h-16 dark:bg-zinc-900/50 backdrop-blur-lg">
+    </span></span
+  >
 
   <!-- Sliding indicator -->
   <span
     bind:this={indicatorEl}
-    class="absolute inset-y-0.5 rounded-full border border-white bg-bg-btn dark:border-white/5 dark:bg-bg-btn dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)] transition-[width,transform,opacity] duration-400 ease-out"
+    class="absolute inset-y-0.75 rounded-full border border-white bg-bg-btn dark:border-white/5 dark:bg-bg-btn dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)] transition-[width,transform,opacity] duration-400 ease-out"
     class:opacity-0={!visible}
     style="width: {indicatorW}px; transform: translateX({indicatorX}px);"
   ></span>
@@ -65,7 +68,7 @@
   <span
     bind:this={tab1El}
     bind:offsetWidth={tab1W}
-    class="relative z-10 px-3 h-full flex items-center transition-opacity duration-200"
+    class="relative z-10 px-4 md:px-3 h-full flex items-center transition-opacity duration-200"
     class:opacity-40={!value}
   >
     {tab1Label}
@@ -75,7 +78,7 @@
   <span
     bind:this={tab2El}
     bind:offsetWidth={tab2W}
-    class="relative z-10 px-3 h-full flex items-center transition-opacity duration-200"
+    class="relative z-10 px-4 md:px-3 h-full flex items-center transition-opacity duration-200"
     class:opacity-40={value}
   >
     {tab2Label}
