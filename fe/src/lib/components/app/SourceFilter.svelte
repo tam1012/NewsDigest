@@ -107,23 +107,6 @@
       sideOffset={8}
       class="z-50 w-72 p-0 max-h-[70vh] flex flex-col rounded-3xl border border-white bg-bg-btn dark:border-white/10 dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)] outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2"
     >
-      <!-- Header -->
-      <!-- <div class="flex items-center justify-between px-4 pt-3 pb-2">
-      <span
-        class="text-xs font-semibold uppercase tracking-wider text-text-secondary"
-        >Bộ lọc</span
-      >
-      {#if hasActiveFilter}
-        <button
-          class="text-[0.625rem] text-blue-600 dark:text-blue-400 hover:underline cursor-pointer flex items-center gap-1"
-          onclick={clearAll}
-        >
-          <X size={10} />
-          Xoá bộ lọc
-        </button>
-      {/if}
-    </div> -->
-
       <div class="overflow-y-auto flex flex-col p-1">
         <!-- Sources Section -->
         {#if availableSources.length > 0}
@@ -146,12 +129,6 @@
                     class="text-[0.625rem] text-text-secondary tabular-nums shrink-0"
                     >{articleCount}</span
                   >
-                  <!-- {#if isSelected}
-                  <Check
-                    size={12}
-                    class="text-blue-600 dark:text-blue-400 shrink-0"
-                  />
-                {/if} -->
                 </button>
               {/each}
             </div>
