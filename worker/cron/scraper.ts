@@ -1,4 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
+import { extractFromXml, extractFromJson } from '@extractus/feed-extractor';
 import { Env, Source, ArticleInput, ScraperProfileConfig, ListingProfileConfig } from '../types';
 import { resolveStaticProfile, SiteProfile } from './site-profiles';
 import { generateListingProfile, generateScraperProfile } from '../ai/scraper-profile';
@@ -22,6 +23,7 @@ function nodeText(value: any): string {
     return '';
   }
   if (typeof value === 'object') {
+    if (typeof value.__cdata === 'string') return value.__cdata.trim();
     if (typeof value._text === 'string') return value._text.trim();
     if (typeof value['#text'] === 'string') return value['#text'].trim();
   }
@@ -51,7 +53,13 @@ function extractItemLink(item: any): string {
 function parseRssOrAtom(xml: string): { items: any[]; format: 'rss' | 'atom' } | null {
   const parser = new XMLParser({
     ignoreAttributes: false,
+    attributeNamePrefix: '@_',
     textNodeName: '_text',
+    cdataPropName: '__cdata',
+    // Skip parsing inside encoded content nodes (HTML entities would cause issues)
+    stopNodes: ['*.content:encoded', '*.encoded'],
+    processEntities: true,
+    htmlEntities: false,
   });
   let result: any;
   try {
@@ -80,6 +88,55 @@ function isLikelyHtml(contentType: string, text: string): boolean {
   if (ct.includes('text/html')) return true;
   const sample = text.slice(0, 800).toLowerCase();
   return sample.includes('<!doctype html') || sample.includes('<html');
+}
+
+/**
+ * Detect charset from HTTP Content-Type header or XML prolog.
+ * Falls back to UTF-8.
+ */
+function detectCharset(contentType: string, buffer: ArrayBuffer): string {
+  // 1. From Content-Type: text/xml; charset=iso-8859-1
+  const ctMatch = contentType.match(/charset=([^\s;,]+)/i);
+  if (ctMatch) return ctMatch[1].trim();
+
+  // 2. From XML prolog: <?xml version="1.0" encoding="windows-1252"?>
+  // Peek first 300 bytes as latin1 (safe for any single-byte encoding)
+  const probe = new TextDecoder('latin1').decode(buffer.slice(0, 300));
+  const xmlMatch = probe.match(/encoding=["']([^"']+)["']/i);
+  if (xmlMatch) return xmlMatch[1].trim();
+
+  return 'utf-8';
+}
+
+/**
+ * Fetch a feed URL as ArrayBuffer, detect charset, decode correctly.
+ * Returns { text, contentType, isJsonFeed }.
+ */
+async function fetchFeedBuffer(
+  url: string,
+  signal?: AbortSignal
+): Promise<{ text: string; contentType: string; isJsonFeed: boolean }> {
+  const response = await fetch(url, {
+    headers: { 'User-Agent': 'NewsDigest/1.0.0' },
+    signal,
+  });
+  if (!response.ok) throw new Error(`Feed fetch failed: ${response.status} ${url}`);
+
+  const contentType = response.headers.get('content-type') || '';
+  const buffer = await response.arrayBuffer();
+  const charset = detectCharset(contentType, buffer);
+
+  // TextDecoder automatically strips BOM for utf-8/utf-16
+  let text: string;
+  try {
+    text = new TextDecoder(charset).decode(buffer).trim();
+  } catch {
+    // Unknown charset label → fallback to UTF-8
+    text = new TextDecoder('utf-8').decode(buffer).trim();
+  }
+
+  const isJsonFeed = /json/i.test(contentType) || (text.startsWith('{') && text.includes('"items"'));
+  return { text, contentType, isJsonFeed };
 }
 
 function cleanText(input: string): string {
@@ -352,46 +409,66 @@ async function fetchYouTubeViaAPI(handle: string, channelId: string, apiKey: str
 }
 
 async function fetchRSS(source: Source): Promise<ArticleInput[]> {
-  const response = await fetch(source.url, {
-    headers: { 'User-Agent': 'NewsDigest/1.0.0' }
-  });
-  if (!response.ok) throw new Error(`RSS feed failed: ${response.status}`);
+  const { text, contentType, isJsonFeed } = await fetchFeedBuffer(
+    source.url,
+    AbortSignal.timeout(15000)
+  );
 
-  const contentType = response.headers.get('content-type') || '';
-  const xml = await response.text();
-  if (isLikelyHtml(contentType, xml)) {
+  if (isLikelyHtml(contentType, text)) {
     throw new Error(`RSS feed returned HTML for ${source.url}. Please use feed URL (XML).`);
   }
 
-  const parsed = parseRssOrAtom(xml);
-  if (!parsed) {
-    throw new Error(`Invalid RSS/Atom payload for ${source.url}`);
+  let entries: Array<{ id?: string; title?: string; link?: string; description?: string; published?: string }>;
+
+  if (isJsonFeed) {
+    // JSON Feed (application/feed+json)
+    let json: any;
+    try { json = JSON.parse(text); } catch { throw new Error(`Invalid JSON Feed for ${source.url}`); }
+    const feed = extractFromJson(json, { descriptionMaxLen: 0 });
+    if (!feed) throw new Error(`Could not parse JSON Feed for ${source.url}`);
+    entries = feed.entries ?? [];
+  } else {
+    // RSS / Atom / RDF with namespace + encoding support
+    let feed: any;
+    try {
+      feed = extractFromXml(text, {
+        descriptionMaxLen: 0,
+        getExtraEntryFields: (entry: any) => {
+          // Pull content:encoded (WordPress / general RSS), dc:creator, media:description
+          const encoded = entry['content:encoded'] ?? entry['encoded'] ?? '';
+          const mediaGroup = entry['media:group'] ?? {};
+          const mediaDesc = mediaGroup['media:description'] ?? entry['media:description'] ?? '';
+          return {
+            // Expose content:encoded as a fallback description
+            contentEncoded: typeof encoded === 'string' ? encoded.trim() : '',
+            mediaDescription: typeof mediaDesc === 'string' ? mediaDesc.trim() : '',
+          };
+        },
+      } as any);
+    } catch (e) {
+      throw new Error(`Invalid RSS/Atom/RDF payload for ${source.url}: ${e}`);
+    }
+    if (!feed) throw new Error(`Invalid RSS/Atom/RDF payload for ${source.url}`);
+    entries = feed.entries ?? [];
   }
 
-  const mapped = parsed.items.slice(0, 20).map((item: any) => {
-    let link = extractItemLink(item);
+  const mapped = entries.slice(0, 20).map((entry: any) => {
+    let link = (entry.link ?? '').trim();
     if (link && !/^https?:\/\//i.test(link)) {
-      try {
-        link = new URL(link, source.url).toString();
-      } catch {
-        link = '';
-      }
+      try { link = new URL(link, source.url).toString(); } catch { link = ''; }
     }
-
-    const title = nodeText(item.title);
-    const desc = nodeText(item.description) || nodeText(item.content) || nodeText(item.summary);
-    const published = item.pubDate || item.published || item.updated || item.dc?.date;
-
+    // description: prefer feed-extractor's normalized field, fallback to content:encoded / media
+    const desc = entry.description || entry.contentEncoded || entry.mediaDescription || '';
     return {
       url: link,
-      title,
+      title: (entry.title ?? '').trim(),
       description: desc,
-      published_at: normalizeDate(published),
+      published_at: normalizeDate(entry.published ?? null),
     };
   });
 
   const valid = mapped.filter(item => item.url && item.title);
-  console.log(`[scraper] RSS ${source.url}: parsed ${parsed.items.length} items, valid ${valid.length}`);
+  console.log(`[scraper] RSS ${source.url}: parsed ${entries.length} entries, valid ${valid.length}`);
   return valid;
 }
 
@@ -800,6 +877,30 @@ async function fetchUnknown(source: Source, env: Env): Promise<ArticleInput[]> {
 
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.includes('text/html')) {
+    // Nếu content-type là XML (RSS/Atom feed), thử parse như RSS thay vì throw lỗi
+    const isXml = contentType.includes('xml') || contentType.includes('rss') || contentType.includes('atom');
+    if (isXml) {
+      // Dùng ArrayBuffer để detect charset đúng (ISO-8859-1, Windows-1252, ...)
+      const xmlBuffer = await response.arrayBuffer();
+      const xmlCharset = detectCharset(contentType, xmlBuffer);
+      let xml: string;
+      try { xml = new TextDecoder(xmlCharset).decode(xmlBuffer).trim(); } catch { xml = new TextDecoder('utf-8').decode(xmlBuffer).trim(); }
+      const parsed = parseRssOrAtom(xml);
+      if (parsed) {
+        console.log(`[scraper] HTML source ${source.url} is actually RSS/Atom (${contentType}), parsing as feed`);
+        const mapped = parsed.items.slice(0, 20).map((item: any) => {
+          let link = extractItemLink(item);
+          if (link && !/^https?:\/\//i.test(link)) {
+            try { link = new URL(link, source.url).toString(); } catch { link = ''; }
+          }
+          const title = nodeText(item.title);
+          const desc = nodeText(item.description) || nodeText(item.content) || nodeText(item.summary);
+          const published = item.pubDate || item.published || item.updated || item.dc?.date;
+          return { url: link, title, description: desc, published_at: normalizeDate(published) };
+        });
+        return mapped.filter(item => item.url && item.title);
+      }
+    }
     throw new Error(`HTML source is not text/html: ${contentType || 'unknown'}`);
   }
 

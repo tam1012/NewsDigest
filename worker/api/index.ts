@@ -38,9 +38,14 @@ const COMMON_FEED_PATHS = [
 const ALLOWED_SOURCE_TYPES: Source['type'][] = ['rss', 'html', 'reddit', 'youtube', 'voz', 'github-trending'];
 
 function parseFeedShape(xml: string): boolean {
+  // Fast regex check: covers RSS/Atom with namespaces, CDATA, etc.
+  const sample = xml.slice(0, 2000);
+  if (/<rss[\s>]/i.test(sample) || /<feed[\s>]/i.test(sample)) return true;
+
   const parser = new XMLParser({
     ignoreAttributes: false,
     textNodeName: '_text',
+    cdataPropName: '_cdata',
   });
   try {
     const parsed: any = parser.parse(xml);
