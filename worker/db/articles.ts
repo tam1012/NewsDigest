@@ -69,10 +69,10 @@ export async function findBySourceAndUrl(
 export async function findSummaryStatus(
   db: D1Database,
   id: string
-): Promise<{ summary: string | null; content: string | null } | null> {
+): Promise<{ summary: string | null; content: string | null; description: string | null } | null> {
   const { results } = await db.prepare(
-    'SELECT summary, content FROM articles WHERE id = ?'
-  ).bind(id).all<{ summary: string | null; content: string | null }>();
+    'SELECT summary, content, description FROM articles WHERE id = ?'
+  ).bind(id).all<{ summary: string | null; content: string | null; description: string | null }>();
   return results?.[0] ?? null;
 }
 
