@@ -679,7 +679,7 @@
             </div>
           {/if}
         {:else}
-          <div class="flex flex-col gap-8 pb-16">
+          <div class="flex flex-col gap-8 pb-24">
             {#each filteredArticles as article (article.id)}
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
