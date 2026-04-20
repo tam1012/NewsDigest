@@ -50,7 +50,7 @@
 >
   <!-- Frosted background -->
   <span
-    class="absolute overflow-hidden flex border dark:border-white/10 border-white/50 justify-center items-center inset-y-0 -inset-x-0.75 rounded-full"
+    class="absolute overflow-hidden flex border dark:border-border border-zinc-100 justify-center items-center inset-y-0 -inset-x-0.75 rounded-full"
   >
     <span class="bg-black/5 w-40 h-16 dark:bg-zinc-900/50 backdrop-blur-lg">
     </span></span
