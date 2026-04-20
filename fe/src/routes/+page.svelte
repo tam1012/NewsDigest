@@ -1109,24 +1109,25 @@
               href={selectedArticle.url}
               target="_blank"
               rel="noopener noreferrer"
-              class="flex items-center gap-1.5 hover:underline underline-offset-4"
+              class="flex items-center gap-1.5 rounded-full hover:underline px-1 underline-offset-4"
             >
               <Link2 size={14} />
               {new URL(selectedArticle.url).hostname.replace('www.', '')}
             </a>
           </div>
-          <a
-            href={selectedArticle.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="hover:underline flex justify-center underline-offset-4"
+
+          <h1
+            class="font-serif text-[1.25em] text-center text-balance md:text-[1.5em] font-bold leading-[1.2] text-text-main inline"
           >
-            <h1
-              class="font-serif text-[1.25em] text-center text-balance md:text-[1.5em] font-bold leading-[1.2] text-text-main inline"
+            <a
+              href={selectedArticle.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="hover:underline underline-offset-4"
             >
               {@html selectedArticle.title}
-            </h1>
-          </a>
+            </a>
+          </h1>
         </div>
 
         <div

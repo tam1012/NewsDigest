@@ -167,6 +167,21 @@
   }
 }
 
+button {
+  outline: none;
+}
+button:focus-visible {
+  outline: none;
+  outline: 2px solid var(--color-text-main);
+  outline-offset: 2px;
+}
+
+a:focus-visible {
+  outline: none;
+  outline: 2px solid var(--color-text-main);
+  outline-offset: 2px;
+} 
+
 aside[data-overlayscrollbars] {
   position: sticky !important;
 }
