@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { Env } from '../../types';
+import { SourceRepo, ArticleRepo } from '../../db';
 import { requireAdmin, normalizeDate, resolveSource, ALLOWED_SOURCE_TYPES } from '../utils';
 
 const sources = new Hono<{ Bindings: Env }>();
@@ -7,23 +8,7 @@ const sources = new Hono<{ Bindings: Env }>();
 // ── GET /api/sources ──────────────────────────────────────
 
 sources.get('/', async (c) => {
-    const { results } = await c.env.DB.prepare(`
-      SELECT
-        s.id,
-        s.url,
-        s.name,
-        s.type,
-        s.enabled,
-        s.channel_id,
-        s.last_fetched_at,
-        s.created_at,
-        COUNT(a.id) AS article_count,
-        COALESCE(SUM(CASE WHEN a.summary IS NOT NULL THEN 1 ELSE 0 END), 0) AS summarized_count
-      FROM sources s
-      LEFT JOIN articles a ON a.source_id = s.id
-      GROUP BY s.id
-      ORDER BY s.name ASC
-    `).all();
+    const results = await SourceRepo.findAllWithStats(c.env.DB);
     return c.json({ sources: results });
 });
 
@@ -61,15 +46,14 @@ sources.post('/', async (c) => {
     }
 
     const id = crypto.randomUUID();
-    await c.env.DB.prepare(
-        'INSERT INTO sources (id, url, name, type, channel_id, enabled) VALUES (?, ?, ?, ?, ?, 1)'
-    ).bind(
+    await SourceRepo.insert(c.env.DB, {
       id,
-      resolved.resolved_url,
-      name || 'Custom Source',
-      resolved.detected_type,
-      channel_id || null,
-    ).run();
+      url: resolved.resolved_url,
+      name: name || 'Custom Source',
+      type: resolved.detected_type,
+      channel_id: channel_id || null,
+      enabled: 1,
+    });
 
     return c.json({
       ok: true,
@@ -95,32 +79,27 @@ sources.patch('/:id', async (c) => {
 
     const id = c.req.param('id');
     const body = await c.req.json();
-    const sets: string[] = [];
-    const binds: any[] = [];
+    const fields: Parameters<typeof SourceRepo.update>[2] = {};
 
-    if (body.enabled !== undefined) { sets.push('enabled = ?'); binds.push(body.enabled ? 1 : 0); }
-    if (body.name !== undefined) { sets.push('name = ?'); binds.push(body.name); }
-    if (body.channel_id !== undefined) { sets.push('channel_id = ?'); binds.push(body.channel_id); }
+    if (body.enabled !== undefined) { fields.enabled = body.enabled ? 1 : 0; }
+    if (body.name !== undefined) { fields.name = body.name; }
+    if (body.channel_id !== undefined) { fields.channel_id = body.channel_id; }
     if (body.url !== undefined) {
       if (typeof body.url !== 'string' || !body.url.trim()) return c.json({ error: 'Invalid url' }, 400);
       try {
-        const normalizedUrl = new URL(body.url.trim()).toString();
-        sets.push('url = ?');
-        binds.push(normalizedUrl);
+        fields.url = new URL(body.url.trim()).toString();
       } catch {
         return c.json({ error: 'Invalid url' }, 400);
       }
     }
     if (body.type !== undefined) {
       if (!ALLOWED_SOURCE_TYPES.includes(body.type)) return c.json({ error: 'Invalid type' }, 400);
-      sets.push('type = ?');
-      binds.push(body.type);
+      fields.type = body.type;
     }
 
-    if (sets.length === 0) return c.json({ error: 'No fields to update' }, 400);
+    if (Object.keys(fields).length === 0) return c.json({ error: 'No fields to update' }, 400);
 
-    binds.push(id);
-    await c.env.DB.prepare(`UPDATE sources SET ${sets.join(', ')} WHERE id = ?`).bind(...binds).run();
+    await SourceRepo.update(c.env.DB, id, fields);
     return c.json({ ok: true });
 });
 
@@ -131,11 +110,7 @@ sources.delete('/:id', async (c) => {
     if (authErr) return authErr;
 
     const id = c.req.param('id');
-    // Xoá articles liên quan trước để tránh lỗi foreign key
-    await c.env.DB.batch([
-        c.env.DB.prepare('DELETE FROM articles WHERE source_id = ?').bind(id),
-        c.env.DB.prepare('DELETE FROM sources WHERE id = ?').bind(id),
-    ]);
+    await SourceRepo.deleteWithArticles(c.env.DB, id);
     return c.json({ ok: true });
 });
 
@@ -146,27 +121,25 @@ sources.post('/:id/fetch', async (c) => {
     if (authErr) return authErr;
 
     const sourceId = c.req.param('id');
-    const { results } = await c.env.DB.prepare('SELECT * FROM sources WHERE id = ?').bind(sourceId).all();
-    if (!results || results.length === 0) return c.json({ error: 'Not found' }, 404);
+    const source = await SourceRepo.findById(c.env.DB, sourceId);
+    if (!source) return c.json({ error: 'Not found' }, 404);
 
-    const source = results[0] as any;
     const { fetchSource } = await import('../../cron/scraper');
     try {
         const articles = await fetchSource(source, c.env);
         let insertedCount = 0;
         for (const art of articles) {
-            const aId = crypto.randomUUID();
-            const result = await c.env.DB.prepare(
-                `INSERT OR IGNORE INTO articles (id, source_id, url, title, description, published_at)
-                 VALUES (?, ?, ?, ?, ?, ?)`
-            ).bind(aId, source.id, art.url, art.title, art.description || '', normalizeDate(art.published_at)).run();
-
-            if (result.meta && result.meta.changes > 0) insertedCount++;
+            const changes = await ArticleRepo.insertOrIgnore(c.env.DB, {
+                id: crypto.randomUUID(),
+                source_id: source.id,
+                url: art.url,
+                title: art.title,
+                description: art.description || '',
+                published_at: normalizeDate(art.published_at),
+            });
+            if (changes > 0) insertedCount++;
         }
-        const lastFetchedAt = new Date().toISOString();
-        await c.env.DB.prepare(
-          'UPDATE sources SET last_fetched_at = ? WHERE id = ?'
-        ).bind(lastFetchedAt, source.id).run();
+        const lastFetchedAt = await SourceRepo.updateLastFetched(c.env.DB, source.id);
 
         return c.json({ ok: true, fetched: articles.length, inserted: insertedCount, last_fetched_at: lastFetchedAt });
     } catch (e: any) {

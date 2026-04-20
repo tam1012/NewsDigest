@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { Env } from '../../types';
+import { ScraperConfigRepo } from '../../db';
 import { requireAdmin } from '../utils';
 
 const scraper = new Hono<{ Bindings: Env }>();
@@ -10,10 +11,8 @@ const scraper = new Hono<{ Bindings: Env }>();
  * List all learned scraper profiles.
  */
 scraper.get('/scraper-configs', async (c) => {
-    const { results } = await c.env.DB.prepare(
-        'SELECT id, domain, mode, config_json, learned_at FROM scraper_configs ORDER BY learned_at DESC'
-    ).all();
-    return c.json({ configs: results });
+    const configs = await ScraperConfigRepo.findAll(c.env.DB);
+    return c.json({ configs });
 });
 
 // ── DELETE /api/scraper-configs/:id ──────────────────────
@@ -26,7 +25,7 @@ scraper.delete('/scraper-configs/:id', async (c) => {
     if (authErr) return authErr;
 
     const id = c.req.param('id');
-    await c.env.DB.prepare('DELETE FROM scraper_configs WHERE id = ?').bind(id).run();
+    await ScraperConfigRepo.deleteById(c.env.DB, id);
     return c.json({ ok: true });
 });
 
@@ -194,14 +193,7 @@ Rules:
     // Save if requested
     let saved = false;
     if (save) {
-        const now = new Date().toISOString();
-        await c.env.DB.prepare(
-            `INSERT INTO scraper_configs (domain, mode, config_json, learned_at)
-             VALUES (?, ?, ?, ?)
-             ON CONFLICT(domain, mode) DO UPDATE SET
-               config_json = excluded.config_json,
-               learned_at = excluded.learned_at`
-        ).bind(domain, 'html', JSON.stringify(aiProfile), now).run();
+        await ScraperConfigRepo.upsert(c.env.DB, domain, 'html', JSON.stringify(aiProfile));
         saved = true;
     }
 
@@ -313,14 +305,7 @@ Rules:
     // Save if requested
     let saved = false;
     if (save) {
-        const now = new Date().toISOString();
-        await c.env.DB.prepare(
-            `INSERT INTO scraper_configs (domain, mode, config_json, learned_at)
-             VALUES (?, ?, ?, ?)
-             ON CONFLICT(domain, mode) DO UPDATE SET
-               config_json = excluded.config_json,
-               learned_at = excluded.learned_at`
-        ).bind(domain, 'listing', JSON.stringify(aiProfile), now).run();
+        await ScraperConfigRepo.upsert(c.env.DB, domain, 'listing', JSON.stringify(aiProfile));
         saved = true;
     }
 

@@ -1,4 +1,5 @@
 import { Env, Source, ArticleInput } from '../../types';
+import { SourceRepo } from '../../db';
 import { parseRssOrAtom, extractItemLink, nodeText, normalizeDate } from '../utils';
 import { NetworkError, ConfigError } from '../../errors';
 
@@ -61,8 +62,7 @@ async function resolveYouTubeChannelId(source: Source, handle: string, env: Env)
 }
 
 async function saveChannelId(sourceId: string, channelId: string, env: Env) {
-  await env.DB.prepare('UPDATE sources SET channel_id = ? WHERE id = ?')
-    .bind(channelId, sourceId).run();
+  await SourceRepo.updateChannelId(env.DB, sourceId, channelId);
   console.log(`[scraper] YouTube channel_id saved: ${channelId}`);
 }
 

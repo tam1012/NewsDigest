@@ -1,4 +1,5 @@
 import { Env, ListingProfileConfig, ArticleInput } from '../../types';
+import { ScraperConfigRepo } from '../../db';
 import { cleanText, slugToTitle, isLikelyArticlePath, isLikelyVercelBlogArticle } from '../utils';
 
 // ── Validation ─────────────────────────────────────────────────────────────
@@ -32,16 +33,11 @@ function validateStoredListingProfile(config: any): ListingProfileConfig | null 
 // ── D1 persistence ──────────────────────────────────────────────────────────
 
 export async function loadStoredListingProfile(domain: string, env: Env): Promise<ListingProfileConfig | null> {
-  const { results } = await env.DB.prepare(
-    'SELECT config_json FROM scraper_configs WHERE domain = ? AND mode = ? LIMIT 1'
-  ).bind(domain, 'listing').all<{ config_json: string }>();
-
-  if (!results || results.length === 0) return null;
-  const row = results[0];
-  if (!row?.config_json) return null;
+  const configJson = await ScraperConfigRepo.findByDomainAndMode(env.DB, domain, 'listing');
+  if (!configJson) return null;
 
   try {
-    return validateStoredListingProfile(JSON.parse(row.config_json));
+    return validateStoredListingProfile(JSON.parse(configJson));
   } catch {
     return null;
   }
@@ -58,13 +54,7 @@ export async function saveListingProfile(domain: string, profile: ListingProfile
     updatedAt: now,
   };
 
-  await env.DB.prepare(
-    `INSERT INTO scraper_configs (domain, mode, config_json, learned_at)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(domain, mode) DO UPDATE SET
-       config_json = excluded.config_json,
-       learned_at = excluded.learned_at`
-  ).bind(domain, 'listing', JSON.stringify(payload), now).run();
+  await ScraperConfigRepo.upsert(env.DB, domain, 'listing', JSON.stringify(payload));
 }
 
 // ── Profile normalisation ───────────────────────────────────────────────────

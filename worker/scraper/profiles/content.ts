@@ -1,4 +1,5 @@
 import { Env, ScraperProfileConfig } from '../../types';
+import { ScraperConfigRepo } from '../../db';
 import { SiteProfile } from '../../cron/site-profiles';
 
 // ── Validation ─────────────────────────────────────────────────────────────
@@ -36,16 +37,11 @@ function validateStoredProfile(config: any): ScraperProfileConfig | null {
 // ── D1 persistence ──────────────────────────────────────────────────────────
 
 export async function loadStoredProfile(domain: string, env: Env): Promise<ScraperProfileConfig | null> {
-  const { results } = await env.DB.prepare(
-    'SELECT config_json FROM scraper_configs WHERE domain = ? AND mode = ? LIMIT 1'
-  ).bind(domain, 'html').all<{ config_json: string }>();
-
-  if (!results || results.length === 0) return null;
-  const row = results[0];
-  if (!row?.config_json) return null;
+  const configJson = await ScraperConfigRepo.findByDomainAndMode(env.DB, domain, 'html');
+  if (!configJson) return null;
 
   try {
-    return validateStoredProfile(JSON.parse(row.config_json));
+    return validateStoredProfile(JSON.parse(configJson));
   } catch {
     return null;
   }
@@ -63,13 +59,7 @@ export async function saveProfile(domain: string, profile: ScraperProfileConfig,
     updatedAt: now,
   };
 
-  await env.DB.prepare(
-    `INSERT INTO scraper_configs (domain, mode, config_json, learned_at)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(domain, mode) DO UPDATE SET
-       config_json = excluded.config_json,
-       learned_at = excluded.learned_at`
-  ).bind(domain, 'html', JSON.stringify(payload), now).run();
+  await ScraperConfigRepo.upsert(env.DB, domain, 'html', JSON.stringify(payload));
 }
 
 // ── Profile normalisation ───────────────────────────────────────────────────

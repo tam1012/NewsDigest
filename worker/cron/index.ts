@@ -1,4 +1,5 @@
 import { Env, Source, ContentScrapeMessage } from '../types';
+import { ArticleRepo, SourceRepo } from '../db';
 import { fetchSource } from './scraper';
 
 /** Chuẩn hoá published_at về ISO 8601 UTC trước khi insert. */
@@ -22,11 +23,9 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
   const cronLabel = isGitHubTrendingCron ? 'GitHub Trending (daily)' : 'General (every 3h)';
   console.log(`Cron [${cronLabel}] triggered at ${new Date().toISOString()}`);
 
-  const { results: allSources } = await env.DB.prepare(
-    "SELECT * FROM sources WHERE enabled = 1 ORDER BY created_at"
-  ).all<Source>();
+  const allSources = await SourceRepo.findAllEnabled(env.DB);
 
-  if (!allSources || allSources.length === 0) {
+  if (allSources.length === 0) {
     console.log("No enabled sources found.");
     return;
   }
@@ -65,27 +64,19 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
 
       if (source.type === 'reddit') {
         // ── Reddit 2-step: check trước, chỉ enqueue bài MỚI hoặc đã sang ngày mới ──
-        const { results: existingRows } = await env.DB.prepare(
-          `SELECT id, description, published_at FROM articles WHERE source_id = ? AND url = ?`
-        ).bind(source.id, article.url).all();
-
-        const existing = existingRows?.[0] as any;
+        const existing = await ArticleRepo.findBySourceAndUrl(env.DB, source.id, article.url);
         const description = article.description || null;
         const publishedAt = normalizePublishedAt(article.published_at);
 
         if (existing) {
           // Luôn update description với stats mới nhất
-          await env.DB.prepare(
-            `UPDATE articles SET description = ? WHERE id = ?`
-          ).bind(description, existing.id).run();
+          await ArticleRepo.updateDescription(env.DB, existing.id, description);
 
           // Nếu bài đã sang ngày mới (> 1 ngày) → reset published_at + re-summarize
           // Nếu đã cào hôm nay rồi → bỏ qua, tránh lặp bài trong ngày
           const daysSince = (Date.now() - new Date(existing.published_at).getTime()) / 86_400_000;
           if (daysSince >= 1) {
-            await env.DB.prepare(
-              `UPDATE articles SET published_at = ?, summary = NULL, description_vn = NULL, hot_score = NULL, tags = NULL WHERE id = ?`
-            ).bind(publishedAt, existing.id).run();
+            await ArticleRepo.resetForReprocessing(env.DB, existing.id, publishedAt);
             newArticles.push({ articleId: existing.id, url: article.url, title: article.title });
             insertedCount++;
             console.log(`🔄 Reddit re-enqueue "${article.title}" — still hot after ${daysSince.toFixed(1)} days`);
@@ -93,35 +84,27 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
         } else {
           // Bài mới hoàn toàn → insert + enqueue
           const idValue = crypto.randomUUID();
-          await env.DB.prepare(
-            `INSERT INTO articles (id, source_id, url, title, description, published_at)
-             VALUES (?, ?, ?, ?, ?, ?)`
-          ).bind(idValue, source.id, article.url, article.title, description, publishedAt).run();
+          await ArticleRepo.insert(env.DB, {
+            id: idValue, source_id: source.id, url: article.url,
+            title: article.title, description, published_at: publishedAt,
+          });
           insertedCount++;
           newArticles.push({ articleId: idValue, url: article.url, title: article.title });
         }
       } else if (source.type === 'github-trending') {
         // ── GitHub Trending: re-enqueue nếu repo leo top lại sau ≥ 3 ngày ──
-        const { results: existingRows } = await env.DB.prepare(
-          `SELECT id, published_at FROM articles WHERE source_id = ? AND url = ?`
-        ).bind(source.id, article.url).all();
-
-        const existing = existingRows?.[0] as any;
+        const existing = await ArticleRepo.findBySourceAndUrl(env.DB, source.id, article.url);
         const description = article.description || null;
         const publishedAt = normalizePublishedAt(article.published_at);
 
         if (existing) {
           // Luôn update description (stars mới nhất)
-          await env.DB.prepare(
-            `UPDATE articles SET description = ? WHERE id = ?`
-          ).bind(description, existing.id).run();
+          await ArticleRepo.updateDescription(env.DB, existing.id, description);
 
           // Nếu bài cũ đã > 3 ngày → coi là trending event mới, reset + re-summarize
           const daysSince = (Date.now() - new Date(existing.published_at).getTime()) / 86_400_000;
           if (daysSince >= 3) {
-            await env.DB.prepare(
-              `UPDATE articles SET published_at = ?, summary = NULL, description_vn = NULL, hot_score = NULL, tags = NULL WHERE id = ?`
-            ).bind(publishedAt, existing.id).run();
+            await ArticleRepo.resetForReprocessing(env.DB, existing.id, publishedAt);
             newArticles.push({ articleId: existing.id, url: article.url, title: article.title });
             insertedCount++;
             console.log(`🔄 GitHub Trending re-enqueue "${article.title}" — last seen ${daysSince.toFixed(1)} days ago`);
@@ -129,10 +112,10 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
         } else {
           // Repo mới hoàn toàn → insert + enqueue
           const idValue = crypto.randomUUID();
-          await env.DB.prepare(
-            `INSERT INTO articles (id, source_id, url, title, description, published_at)
-             VALUES (?, ?, ?, ?, ?, ?)`
-          ).bind(idValue, source.id, article.url, article.title, description, publishedAt).run();
+          await ArticleRepo.insert(env.DB, {
+            id: idValue, source_id: source.id, url: article.url,
+            title: article.title, description, published_at: publishedAt,
+          });
           insertedCount++;
           newArticles.push({ articleId: idValue, url: article.url, title: article.title });
         }
@@ -141,12 +124,12 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
         const idValue = crypto.randomUUID();
         const publishedAt = normalizePublishedAt(article.published_at);
         const description = article.description || null;
-        const result = await env.DB.prepare(
-          `INSERT OR IGNORE INTO articles (id, source_id, url, title, description, published_at)
-           VALUES (?, ?, ?, ?, ?, ?)`
-        ).bind(idValue, source.id, article.url, article.title, description, publishedAt).run();
+        const changes = await ArticleRepo.insertOrIgnore(env.DB, {
+          id: idValue, source_id: source.id, url: article.url,
+          title: article.title, description, published_at: publishedAt,
+        });
 
-        if (result.meta && result.meta.changes > 0) {
+        if (changes > 0) {
           insertedCount++;
           newArticles.push({ articleId: idValue, url: article.url, title: article.title });
         }
@@ -178,9 +161,7 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
     }
 
     // Cập nhật last_fetched_at
-    await env.DB.prepare(
-      "UPDATE sources SET last_fetched_at = ? WHERE id = ?"
-    ).bind(new Date().toISOString(), source.id).run();
+    await SourceRepo.updateLastFetched(env.DB, source.id);
 
     return { name: source.name, fetched: articles.length, inserted: insertedCount, enqueued: newArticles.length };
   }
