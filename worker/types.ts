@@ -7,6 +7,18 @@ export interface Env {
   AI_GATEWAY_TOKEN: string;
   AI_GATEWAY_URL: string;
   ADMIN_API_KEY?: string;
+
+  // ── Prompt configuration (all optional — see worker/ai/prompt-config.ts) ──
+  /** Full language name for AI output, e.g. "Vietnamese", "English". Default: "Vietnamese" */
+  PROMPT_OUTPUT_LANGUAGE?: string;
+  /** Comma-separated topic priorities for hot_score boosting. */
+  PROMPT_TOPIC_PRIORITIES?: string;
+  /** Comma-separated whitelist of tags the AI can assign. */
+  PROMPT_ALLOWED_TAGS?: string;
+  /** Comma-separated suggested ## heading groups for the daily digest. */
+  PROMPT_DIGEST_HEADINGS?: string;
+  /** Optional plain-text extra context appended to system prompts. */
+  PROMPT_CUSTOM_CONTEXT?: string;
 }
 
 export interface ScraperProfileConfig {
