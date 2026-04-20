@@ -1,12 +1,7 @@
 import { Env } from '../types';
+import { ProhibitedContentError } from '../errors';
 
-/** Thrown when Gemini blocks content as prohibited — should NOT be retried. */
-export class ProhibitedContentError extends Error {
-  constructor(reason: string) {
-    super(`AI content blocked: ${reason}`);
-    this.name = 'ProhibitedContentError';
-  }
-}
+export { ProhibitedContentError };
 
 export interface SummaryResult {
   description_vn: string;

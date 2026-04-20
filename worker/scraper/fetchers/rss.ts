@@ -1,6 +1,7 @@
 import { extractFromXml, extractFromJson } from '@extractus/feed-extractor';
 import { Source, ArticleInput } from '../../types';
 import { fetchFeedBuffer, isLikelyHtml, normalizeDate } from '../utils';
+import { ContentUnavailableError, ParseError } from '../../errors';
 
 export async function fetchRSS(source: Source): Promise<ArticleInput[]> {
   const { text, contentType, isJsonFeed } = await fetchFeedBuffer(
@@ -9,7 +10,7 @@ export async function fetchRSS(source: Source): Promise<ArticleInput[]> {
   );
 
   if (isLikelyHtml(contentType, text)) {
-    throw new Error(`RSS feed returned HTML for ${source.url}. Please use feed URL (XML).`);
+    throw new ContentUnavailableError(`RSS feed returned HTML for ${source.url}. Please use feed URL (XML).`, source.url);
   }
 
   let entries: Array<{ id?: string; title?: string; link?: string; description?: string; published?: string }>;
@@ -17,9 +18,9 @@ export async function fetchRSS(source: Source): Promise<ArticleInput[]> {
   if (isJsonFeed) {
     // JSON Feed (application/feed+json)
     let json: any;
-    try { json = JSON.parse(text); } catch { throw new Error(`Invalid JSON Feed for ${source.url}`); }
+    try { json = JSON.parse(text); } catch { throw new ParseError(`Invalid JSON Feed for ${source.url}`, source.url); }
     const feed = extractFromJson(json, { descriptionMaxLen: 0 });
-    if (!feed) throw new Error(`Could not parse JSON Feed for ${source.url}`);
+    if (!feed) throw new ParseError(`Could not parse JSON Feed for ${source.url}`, source.url);
     entries = feed.entries ?? [];
   } else {
     // RSS / Atom / RDF with namespace + encoding support
@@ -40,9 +41,9 @@ export async function fetchRSS(source: Source): Promise<ArticleInput[]> {
         },
       } as any);
     } catch (e) {
-      throw new Error(`Invalid RSS/Atom/RDF payload for ${source.url}: ${e}`);
+      throw new ParseError(`Invalid RSS/Atom/RDF payload for ${source.url}: ${e}`, source.url);
     }
-    if (!feed) throw new Error(`Invalid RSS/Atom/RDF payload for ${source.url}`);
+    if (!feed) throw new ParseError(`Invalid RSS/Atom/RDF payload for ${source.url}`, source.url);
     entries = feed.entries ?? [];
   }
 

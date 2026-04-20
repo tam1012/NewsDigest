@@ -1,4 +1,5 @@
 import { Env } from '../types';
+import { NetworkError, ContentUnavailableError } from '../errors';
 import { SiteProfile, resolveStaticProfile } from '../cron/site-profiles';
 import { decodeEntities, sanitizeHtmlForAi } from './utils';
 import {
@@ -110,10 +111,14 @@ export async function extractArticleContent(url: string, env: Env): Promise<stri
       signal: AbortSignal.timeout(10000),
     });
 
-    if (!response.ok) return '';
+    if (!response.ok) {
+      throw new NetworkError(`HTTP ${response.status} fetching ${url}`, response.status, url);
+    }
 
     const contentType = response.headers.get('content-type') || '';
-    if (!contentType.includes('text/html')) return '';
+    if (!contentType.includes('text/html')) {
+      throw new ContentUnavailableError(`Not an HTML page (content-type: ${contentType})`, url);
+    }
 
     const finalUrl = response.url || url;
     const domain = new URL(finalUrl).hostname.replace(/^www\./, '').toLowerCase();
@@ -174,8 +179,12 @@ export async function extractArticleContent(url: string, env: Env): Promise<stri
       `[scraper] ${domain}: extracted ${chosen.text.length} chars (${chosen.paragraphs} paragraphs) profile=${usedProfile}`
     );
     return chosen.text;
-  } catch (err: any) {
-    console.log(`[scraper] extract_error ${url}: ${err.message}`);
-    return '';
+  } catch (err: unknown) {
+    // Re-throw typed errors so the queue consumer can decide retry strategy
+    if (err instanceof NetworkError || err instanceof ContentUnavailableError) throw err;
+    // Unexpected error (HTMLRewriter crash, etc.) — wrap and re-throw
+    const message = err instanceof Error ? err.message : String(err);
+    console.log(`[scraper] extract_error ${url}: ${message}`);
+    throw new NetworkError(`Unexpected scrape error: ${message}`, undefined, url);
   }
 }

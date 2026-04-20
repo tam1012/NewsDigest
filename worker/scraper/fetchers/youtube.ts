@@ -1,5 +1,6 @@
 import { Env, Source, ArticleInput } from '../../types';
 import { parseRssOrAtom, extractItemLink, nodeText, normalizeDate } from '../utils';
+import { NetworkError, ConfigError } from '../../errors';
 
 /**
  * Resolve YouTube channel handle (@handle) → channel_id.
@@ -56,7 +57,7 @@ async function resolveYouTubeChannelId(source: Source, handle: string, env: Env)
     }
   }
 
-  throw new Error(`Could not resolve channel_id for @${handle}`);
+  throw new ConfigError(`Could not resolve channel_id for @${handle}`);
 }
 
 async function saveChannelId(sourceId: string, channelId: string, env: Env) {
@@ -130,18 +131,18 @@ async function fetchYouTubeViaAPI(handle: string, channelId: string, apiKey: str
     `https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=${channelId}&key=${apiKey}`,
     { signal: AbortSignal.timeout(10000) }
   );
-  if (!channelRes.ok) throw new Error(`YouTube API channels failed: ${channelRes.status}`);
+  if (!channelRes.ok) throw new NetworkError(`YouTube API channels failed: ${channelRes.status}`, channelRes.status);
 
   const channelData: any = await channelRes.json();
   const playlistId = channelData.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
-  if (!playlistId) throw new Error(`No uploads playlist for @${handle}`);
+  if (!playlistId) throw new ConfigError(`No uploads playlist for @${handle}`);
 
   // Get latest videos from uploads playlist
   const res = await fetch(
     `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${playlistId}&maxResults=5&key=${apiKey}`,
     { signal: AbortSignal.timeout(10000) }
   );
-  if (!res.ok) throw new Error(`YouTube API playlistItems failed: ${res.status}`);
+  if (!res.ok) throw new NetworkError(`YouTube API playlistItems failed: ${res.status}`, res.status);
 
   const data: any = await res.json();
   const items = data.items || [];
@@ -167,7 +168,7 @@ async function fetchYouTubeViaAPI(handle: string, channelId: string, apiKey: str
 export async function fetchYouTube(source: Source, env: Env): Promise<ArticleInput[]> {
   const handleMatch = source.url.match(/@([a-zA-Z0-9_-]+)/);
   if (!handleMatch) {
-    throw new Error(`Cannot extract YouTube handle from URL: ${source.url}`);
+    throw new ConfigError(`Cannot extract YouTube handle from URL: ${source.url}`);
   }
 
   const handle = handleMatch[1];
@@ -183,5 +184,5 @@ export async function fetchYouTube(source: Source, env: Env): Promise<ArticleInp
     return fetchYouTubeViaAPI(handle, channelId, env.YOUTUBE_API_KEY);
   }
 
-  throw new Error(`YouTube RSS feed unavailable for @${handle} and no YOUTUBE_API_KEY configured`);
+  throw new ConfigError(`YouTube RSS feed unavailable for @${handle} and no YOUTUBE_API_KEY configured`);
 }

@@ -1,4 +1,5 @@
 import { Env, Source, ArticleInput } from '../../types';
+import { NetworkError, ContentUnavailableError, ParseError } from '../../errors';
 import { detectCharset, parseRssOrAtom, extractItemLink, nodeText, normalizeDate, sanitizeHtmlForAi } from '../utils';
 import {
   loadStoredListingProfile,
@@ -21,7 +22,7 @@ export async function fetchUnknown(source: Source, env: Env): Promise<ArticleInp
     redirect: 'follow',
     signal: AbortSignal.timeout(15000),
   });
-  if (!response.ok) throw new Error(`HTML source failed: ${response.status}`);
+  if (!response.ok) throw new NetworkError(`HTML source failed: ${response.status}`, response.status, source.url);
 
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.includes('text/html')) {
@@ -48,8 +49,10 @@ export async function fetchUnknown(source: Source, env: Env): Promise<ArticleInp
         });
         return mapped.filter(item => item.url && item.title);
       }
+      // Could not parse as RSS/Atom even though content-type suggested it
+      throw new ParseError(`Could not parse XML response as RSS/Atom for ${source.url}`, source.url);
     }
-    throw new Error(`HTML source is not text/html: ${contentType || 'unknown'}`);
+    throw new ContentUnavailableError(`HTML source is not text/html: ${contentType || 'unknown'}`, source.url);
   }
 
   const finalUrl = response.url || source.url;
