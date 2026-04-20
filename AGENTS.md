@@ -22,26 +22,56 @@ Main flow: Cron → scrape sources → insert articles into D1 → enqueue to Qu
 /
 ├── worker/                     # Cloudflare Worker (backend)
 │   ├── index.ts                # Entry point: fetch / scheduled / queue handlers
-│   ├── types.ts                # Env interface + all shared types
+│   ├── types.ts                # Env interface + all shared types (incl. PROMPT_* env vars)
+│   ├── errors.ts               # Typed error classes (NetworkError, RateLimitError, etc.) + retryStrategy()
 │   ├── api/
 │   │   ├── index.ts            # Hono app, route mounting
+│   │   ├── utils.ts            # requireAdmin(), normalizeDate(), resolveSource()
 │   │   └── routes/
-│   │       ├── articles.ts     # GET /api/articles, POST /api/articles/resummarize, ...
-│   │       ├── sources.ts      # CRUD sources
-│   │       ├── digest.ts       # GET /api/digest
-│   │       └── scraper.ts      # Admin: scraper config management
+│   │       ├── articles.ts     # GET /api/articles, POST /enrich, /enqueue-scrape, /resummarize, /summarize
+│   │       ├── sources.ts      # CRUD sources + POST /resolve, POST /:id/fetch
+│   │       ├── digest.ts       # GET /api/digest, POST /generate
+│   │       └── scraper.ts      # Admin: scraper config management + POST /scraper-profile/test
 │   ├── cron/
 │   │   ├── index.ts            # scheduled() — main scrape loop (every 3h)
-│   │   ├── scraper.ts          # fetchSource() + extractArticleContent() + listing/profile logic
+│   │   ├── scraper.ts          # ⚠️ Backward-compat shim only — re-exports from worker/scraper/
 │   │   ├── digest.ts           # scheduledDigest() — create/update daily digest
 │   │   ├── retry-failed.ts     # retryFailedArticles() — runs every 30 minutes
-│   │   ├── site-profiles.ts    # Static hardcoded scraper profiles per domain
+│   │   ├── site-profiles.ts    # Static hardcoded scraper profiles per domain + resolveStaticProfile()
 │   │   └── cleanup.ts          # cleanOldContent() — purge content older than 7 days
+│   ├── db/
+│   │   ├── index.ts            # Re-exports all repos (ArticleRepo, SourceRepo, DigestRepo, ScraperConfigRepo)
+│   │   ├── articles.ts         # All D1 queries for the articles table
+│   │   ├── sources.ts          # All D1 queries for the sources table
+│   │   ├── digests.ts          # All D1 queries for the digests table
+│   │   └── scraper-configs.ts  # All D1 queries for the scraper_configs table
 │   ├── queue/
-│   │   └── content-scraper.ts  # handleContentQueue() — scrape content + AI summarize
+│   │   ├── content-scraper.ts  # handleContentQueue() — orchestrates fetch + AI summarize
+│   │   └── fetchers/
+│   │       ├── index.ts        # ContentFetcher interface + resolveFetcher() registry
+│   │       ├── youtube.ts      # RapidAPI yt-api transcript fetcher
+│   │       ├── reddit.ts       # Reddit JSON API fetcher (post + top comments)
+│   │       ├── github.ts       # GitHub API README fetcher
+│   │       └── generic.ts      # Fallback: delegates to extractArticleContent()
+│   ├── scraper/
+│   │   ├── index.ts            # Public API: re-exports fetchSource, extractArticleContent, etc.
+│   │   ├── source.ts           # fetchSource() — dispatches to per-type fetcher
+│   │   ├── extract.ts          # extractArticleContent() + extractFromHtmlWithProfile()
+│   │   ├── utils.ts            # normalizeDate, parseRssOrAtom, fetchFeedBuffer, sanitizeHtmlForAi, etc.
+│   │   ├── fetchers/
+│   │   │   ├── rss.ts          # fetchRSS() — RSS/Atom/RDF/JSON Feed with charset detection
+│   │   │   ├── youtube.ts      # fetchYouTube() — RSS first, API v3 fallback
+│   │   │   ├── reddit.ts       # fetchReddit() — /hot.json listing
+│   │   │   ├── github-trending.ts # fetchGitHubTrending() — HTMLRewriter scrape
+│   │   │   ├── voz.ts          # fetchVoz() — HTMLRewriter scrape
+│   │   │   └── html.ts         # fetchUnknown() — AI listing profiles + fallback heuristics
+│   │   └── profiles/
+│   │       ├── content.ts      # loadStoredProfile, saveProfile, normalizeProfile, shouldAcceptCandidate
+│   │       └── listing.ts      # loadStoredListingProfile, extractListingWithSelectorSet, buildListingArticles
 │   └── ai/
-│       ├── summarizer.ts       # summarizeArticle() + generateDigest() + Gemini API call logic
-│       └── scraper-profile.ts  # AI-generated CSS selector profiles
+│       ├── summarizer.ts       # summarizeArticle() + generateDigest() + Gemini call logic + fallback
+│       ├── scraper-profile.ts  # generateScraperProfile() + generateListingProfile() + callGemini()
+│       └── prompt-config.ts    # buildPromptConfig(env) — reads PROMPT_* env vars with defaults
 ├── fe/                         # SvelteKit frontend (PWA)
 │   └── src/
 │       ├── lib/
@@ -93,7 +123,7 @@ Four main tables — see `schema.sql` for full definitions:
 
 ## Source Types & Fetch Strategy
 
-Each source type has its own fetcher in `worker/cron/scraper.ts`:
+Each source type has its own fetcher in `worker/scraper/fetchers/`:
 
 | Type | Fetcher | Notes |
 |---|---|---|
@@ -104,6 +134,8 @@ Each source type has its own fetcher in `worker/cron/scraper.ts`:
 | `voz` | `fetchVoz()` | HTMLRewriter scrape of `voz.vn` |
 | `html` | `fetchUnknown()` | AI-learned listing profiles (CSS selectors stored in D1) |
 
+Entry point is `fetchSource()` in `worker/scraper/source.ts`, dispatches to the above.
+
 ---
 
 ## Queue Flow (Content Scraping)
@@ -112,10 +144,12 @@ Each source type has its own fetcher in `worker/cron/scraper.ts`:
 Cron inserts article → CONTENT_QUEUE.sendBatch()
     ↓
 handleContentQueue() [worker/queue/content-scraper.ts]
-    ├── YouTube URL  → RapidAPI yt-api /subtitles → parse XML transcript
-    ├── Reddit URL   → reddit.com/.json (post + top comments)
-    ├── GitHub repo  → GitHub API /readme → raw download
-    └── Other        → extractArticleContent() (HTMLRewriter + AI profiles)
+    ↓
+resolveFetcher(url) [worker/queue/fetchers/index.ts]
+    ├── youtubeFetcher  → RapidAPI yt-api /subtitles → parse XML transcript
+    ├── redditFetcher   → reddit.com/.json (post + top comments)
+    ├── githubFetcher   → GitHub API /readme → raw download
+    └── genericFetcher  → extractArticleContent() (HTMLRewriter + AI profiles)
     ↓
 summarizeArticle() [worker/ai/summarizer.ts]
     ├── JSON mode (Gemini, retry 3x, alternating models)
@@ -124,19 +158,20 @@ summarizeArticle() [worker/ai/summarizer.ts]
 UPDATE articles SET summary=?, hot_score=?, tags=?, content=NULL
 ```
 
-**Reddit articles** are enqueued with per-message `delaySeconds` stagger (15s per article) to avoid 429s.
+**Reddit articles** are enqueued with per-message `delaySeconds` stagger (15s per article) to avoid 429s. The `redditFetcher` itself does **not** add delays — staggering is handled entirely at enqueue time.
 
 ---
 
 ## AI / Gemini Integration
 
-File: `worker/ai/summarizer.ts`
+Files: `worker/ai/summarizer.ts`, `worker/ai/scraper-profile.ts`, `worker/ai/prompt-config.ts`
 
 - Model pool: `gemma-4-31b-it` and `gemma-4-26b-a4b-it` — random pick + automatic failover on 429
 - Called via Cloudflare AI Gateway (BYOK with Google AI Studio key)
 - Auth headers: `cf-aig-authorization: Bearer <token>` + `cf-aig-byok-alias: default`
 - JSON mode (`responseMimeType: 'application/json'`) — `extractJson()` handles repair/fallback parsing
 - `ProhibitedContentError` = blocked by safety filters, do NOT retry, marks `summary='[blocked]'`
+- Prompts are configurable via `PROMPT_*` env vars — see `worker/ai/prompt-config.ts` and Environment Variables section
 
 **Article output schema:**
 ```ts
@@ -156,18 +191,26 @@ Base URL: Worker URL (local: `http://localhost:8787`)
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/api/articles` | — | List articles with pagination and filters (tag, source_id, min_hot, from/to, ids) |
+| GET | `/api/articles` | — | List articles with pagination and filters (tag, source_id, min_hot, from/to, ids, sort, compact) |
 | GET | `/api/articles/:id` | — | Single article detail |
-| POST | `/api/articles/resummarize` | Admin | Re-run AI on articles that have content but no summary |
+| POST | `/api/articles/enrich` | — | Fetch raw content for articles that lack it (batched, max 5 parallel) |
 | POST | `/api/articles/enqueue-scrape` | — | Manually enqueue articles to the Queue for content scraping |
-| GET | `/api/sources` | — | List all sources |
-| POST | `/api/sources` | Admin | Add a new source |
-| DELETE | `/api/sources/:id` | Admin | Delete a source |
-| GET | `/api/digest` | — | Get digest (defaults to today) |
-| GET | `/api/scraper-configs` | Admin | View AI-learned scraper profiles |
-| DELETE | `/api/scraper-configs/:domain` | Admin | Delete a domain's scraper profile |
+| POST | `/api/articles/resummarize` | Admin | Re-run AI on articles that have content but no summary |
+| POST | `/api/articles/summarize` | — | Dify integration: batch-update summary fields |
+| GET | `/api/sources` | — | List all sources with article/summarized counts |
+| POST | `/api/sources/resolve` | Admin | Resolve + detect type for a URL (without saving) |
+| POST | `/api/sources` | Admin | Add a new source (auto-resolves URL) |
+| PATCH | `/api/sources/:id` | Admin | Update source fields (enabled, name, url, type, channel_id) |
+| DELETE | `/api/sources/:id` | Admin | Delete a source and all its articles |
+| POST | `/api/sources/:id/fetch` | Admin | Manually trigger a fetch for one source |
+| GET | `/api/digest` | — | Get digest (defaults to today VN time, accepts ?date=YYYY-MM-DD) |
+| POST | `/api/digest` | — | Manual digest submission |
+| POST | `/api/digest/generate` | — | Manually trigger digest generation |
+| GET | `/api/scraper-configs` | — | List all AI-learned scraper profiles |
+| DELETE | `/api/scraper-configs/:id` | Admin | Delete a scraper profile by ID |
+| POST | `/api/scraper-profile/test` | Admin | Test/learn a scraper profile for a URL (mode: article or listing) |
 
-Admin auth: `X-Admin-Key: <ADMIN_API_KEY>` header. Auth is skipped if `ADMIN_API_KEY` is not set.
+Admin auth: `X-Admin-Key: <ADMIN_API_KEY>` header. Auth is skipped if `ADMIN_API_KEY` is not set in env.
 
 ---
 
@@ -182,8 +225,14 @@ See `.env.example` for the full list. Key variables:
 | `RAPIDAPI_KEY` | ✅ | YouTube transcript fetching via yt-api.p.rapidapi.com |
 | `YOUTUBE_API_KEY` | ☑️ | Fallback when YouTube RSS feeds are unavailable |
 | `ADMIN_API_KEY` | ☑️ | Protects write endpoints |
+| `PROMPT_OUTPUT_LANGUAGE` | ☑️ | Output language for AI summaries (default: `Vietnamese`) |
+| `PROMPT_OUTPUT_LOCALE` | ☑️ | Short locale code used in prompt phrasing (default: `vi`) |
+| `PROMPT_TOPIC_PRIORITIES` | ☑️ | Comma-separated priority topics for hot_score boosting |
+| `PROMPT_ALLOWED_TAGS` | ☑️ | Comma-separated tag whitelist for AI tagging |
+| `PROMPT_DIGEST_HEADINGS` | ☑️ | Comma-separated suggested ## headings in digest (soft suggestions) |
+| `PROMPT_CUSTOM_CONTEXT` | ☑️ | Free-form extra instruction appended to system prompt (plain text only) |
 
-Cloudflare bindings defined in the `Env` interface (`worker/types.ts`): `DB` (D1), `SCRAPER_CONFIG` (KV), `CONTENT_QUEUE` (Queue).
+All `PROMPT_*` vars are optional — defaults reproduce the current Vietnamese/tech behavior. Cloudflare bindings defined in the `Env` interface (`worker/types.ts`): `DB` (D1), `SCRAPER_CONFIG` (KV), `CONTENT_QUEUE` (Queue).
 
 ---
 
@@ -228,15 +277,19 @@ npm run deploy:worker
 
 **TypeScript / Worker:**
 - All types are defined in `worker/types.ts` — do not create duplicate type definitions elsewhere
+- All D1 queries go through `worker/db/` repos — no raw SQL in business logic
+- Typed errors live in `worker/errors.ts` — use `NetworkError`, `RateLimitError`, `ContentUnavailableError`, `ConfigError`, `ProhibitedContentError`; `retryStrategy()` decides queue ack vs retry
 - Env bindings must match `wrangler.toml` (D1 `DB`, KV `SCRAPER_CONFIG`, Queue `CONTENT_QUEUE`)
 - Workers free plan has a 6 subrequest limit — use `sendBatch()` instead of looping `send()`
 - Reddit fetching is always sequential, never parallel (rate limits from Cloudflare datacenter IPs)
 - `content` column is temporary storage — it is always set NULL after AI processing, do not use it as a long-term cache
+- `worker/cron/scraper.ts` is a backward-compat shim only — import from `worker/scraper/` for new code
 
 **AI / Scraper:**
 - `scraper_configs` caches AI-learned CSS selectors — invalidate by deleting the row via the admin API
 - YouTube `channel_id` is cached in `sources.channel_id` after the first successful resolve
 - Listing profiles (`mode='listing'`) and content profiles (`mode='html'`) are two distinct profile types
+- `PROMPT_CUSTOM_CONTEXT` must be plain text only — no XML tags or markdown that could break the system prompt structure
 
 **Frontend (SvelteKit):**
 - `API_BASE` is injected at build time via `VITE_API_URL` — never hardcode the Worker URL
