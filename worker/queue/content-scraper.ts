@@ -1,4 +1,5 @@
 import { Env, ContentScrapeMessage } from '../types';
+import { ArticleRepo } from '../db';
 import { summarizeArticle } from '../ai/summarizer';
 import { ProhibitedContentError, ContentUnavailableError, retryStrategy } from '../errors';
 import { resolveFetcher } from './fetchers';
@@ -22,27 +23,23 @@ export async function handleContentQueue(
 
     try {
       // ── 1. Skip duplicates ─────────────────────────────────────────────
-      const { results: existing } = await env.DB.prepare(
-        'SELECT summary, content FROM articles WHERE id = ?'
-      ).bind(articleId).all();
+      const status = await ArticleRepo.findSummaryStatus(env.DB, articleId);
 
-      if (existing?.[0] && (existing[0] as any).summary) {
+      if (status?.summary) {
         console.log(`⏭️ Skipping "${title}" — already summarized`);
         message.ack();
         continue;
       }
 
       // ── 2. Fetch content ───────────────────────────────────────────────
-      let content = (existing?.[0] as any)?.content || '';
+      let content = status?.content || '';
 
       if (!content) {
         const fetcher = resolveFetcher(url);
         content = await fetcher.fetch(url, env);
 
         if (content) {
-          await env.DB.prepare(
-            'UPDATE articles SET content = ? WHERE id = ?'
-          ).bind(content, articleId).run();
+          await ArticleRepo.updateContent(env.DB, articleId, content);
           console.log(`✅ Scraped content for ${url} (${content.length} chars)`);
         }
       } else {
@@ -54,22 +51,12 @@ export async function handleContentQueue(
         try {
           const aiResult = await summarizeArticle(title || '', content, env);
           if (aiResult) {
-            await env.DB.prepare(
-              'UPDATE articles SET description_vn = ?, summary = ?, hot_score = ?, tags = ?, content = NULL WHERE id = ?'
-            ).bind(
-              aiResult.description_vn,
-              aiResult.summary,
-              aiResult.hot_score,
-              JSON.stringify(aiResult.tags),
-              articleId
-            ).run();
+            await ArticleRepo.updateSummary(env.DB, articleId, aiResult);
             console.log(`🤖 AI: "${title}" → score=${aiResult.hot_score} tags=${aiResult.tags.join(',')}`);
           }
         } catch (aiErr: unknown) {
           if (aiErr instanceof ProhibitedContentError) {
-            await env.DB.prepare(
-              "UPDATE articles SET summary = '[blocked]', hot_score = 0, content = NULL WHERE id = ?"
-            ).bind(articleId).run();
+            await ArticleRepo.updateBlocked(env.DB, articleId);
             const aiMsg = aiErr instanceof Error ? aiErr.message : String(aiErr);
             console.log(`🚫 AI blocked "${title}": ${aiMsg} — marked as [blocked]`);
           } else {
@@ -90,9 +77,7 @@ export async function handleContentQueue(
         // Permanent errors (ContentUnavailableError, ConfigError, etc.)
         if (err instanceof ContentUnavailableError) {
           // Set a user-facing note so the article isn't silently blank
-          await env.DB.prepare(
-            'UPDATE articles SET description_vn = ? WHERE id = ? AND description_vn IS NULL'
-          ).bind('📄 Content not available for this article.', articleId).run();
+          await ArticleRepo.updateDescriptionVn(env.DB, articleId, '📄 Content not available for this article.');
         }
         console.log(`🚫 Permanent error for "${title}" — acking without retry`);
         message.ack();
@@ -100,9 +85,7 @@ export async function handleContentQueue(
         // Transient errors — retry with optional delay
         if (strategy.delaySeconds && url.includes('reddit.com')) {
           // Reddit rate-limit: set a user-facing placeholder before retry
-          await env.DB.prepare(
-            'UPDATE articles SET description_vn = ? WHERE id = ? AND description_vn IS NULL'
-          ).bind('⏳ Reddit rate-limited — updating later.', articleId).run();
+          await ArticleRepo.updateDescriptionVn(env.DB, articleId, '⏳ Reddit rate-limited — updating later.');
         }
         message.retry({ delaySeconds: strategy.delaySeconds });
       }

@@ -1,4 +1,5 @@
 import { Env, ContentScrapeMessage } from '../types';
+import { ArticleRepo } from '../db';
 
 const RETRY_WINDOW_DAYS = 3;
 const MAX_RETRY_BATCH = 50; // tối đa 50 bài mỗi lần chạy
@@ -18,30 +19,16 @@ export async function retryFailedArticles(env: Env): Promise<void> {
   // Tính mốc thời gian: 3 ngày trước (UTC)
   const cutoff = new Date(Date.now() - RETRY_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
-  // Lấy các bài lỗi: chưa có summary, trong cửa sổ 3 ngày
-  // Bao gồm cả bài chưa cào (content NULL) và bài đã cào nhưng AI lỗi (content NOT NULL nhưng summary NULL)
-  const { results } = await env.DB.prepare(
-    `SELECT id, url, title, content
-     FROM articles
-     WHERE summary IS NULL
-       AND published_at >= ?
-     ORDER BY published_at DESC
-     LIMIT ?`
-  ).bind(cutoff, MAX_RETRY_BATCH).all<{
-    id: string;
-    url: string;
-    title: string;
-    content: string | null;
-  }>();
+  const results = await ArticleRepo.findFailed(env.DB, cutoff, MAX_RETRY_BATCH);
 
-  if (!results || results.length === 0) {
+  if (results.length === 0) {
     console.log('🔄 No failed articles to retry.');
     return;
   }
 
   // Phân loại: bài chưa cào content vs bài đã có content nhưng chưa summarize
   const needsScraping: ContentScrapeMessage[] = [];
-  const needsSummaryOnly: { id: string; url: string; title: string; content: string }[] = [];
+  const needsSummaryOnly: ContentScrapeMessage[] = [];
 
   for (const article of results) {
     if (!article.content) {
@@ -49,12 +36,7 @@ export async function retryFailedArticles(env: Env): Promise<void> {
       needsScraping.push({ articleId: article.id, url: article.url, title: article.title });
     } else {
       // Đã có content nhưng AI chưa chạy được → chỉ cần summarize lại
-      needsSummaryOnly.push({
-        id: article.id,
-        url: article.url,
-        title: article.title,
-        content: article.content,
-      });
+      needsSummaryOnly.push({ articleId: article.id, url: article.url, title: article.title });
     }
   }
 
@@ -91,12 +73,7 @@ export async function retryFailedArticles(env: Env): Promise<void> {
   // Thực ra content-scraper luôn cào lại, nhưng bài đã có summary sẽ bị skip.
   // Với bài chưa có summary nhưng đã có content → enqueue lại cho content-scraper xử lý.
   if (needsSummaryOnly.length > 0) {
-    const messages: ContentScrapeMessage[] = needsSummaryOnly.map(a => ({
-      articleId: a.id,
-      url: a.url,
-      title: a.title,
-    }));
-    await env.CONTENT_QUEUE.sendBatch(messages.map(a => ({ body: a })));
+    await env.CONTENT_QUEUE.sendBatch(needsSummaryOnly.map(a => ({ body: a })));
     console.log(`🔄 Re-enqueued ${needsSummaryOnly.length} articles for AI summarization.`);
   }
 

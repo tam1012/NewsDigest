@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { Env } from '../../types';
+import { DigestRepo } from '../../db';
 
 const digest = new Hono<{ Bindings: Env }>();
 
@@ -16,15 +17,8 @@ digest.get('/', async (c) => {
     const vnNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
     const dateStr = dateParam || vnNow.toISOString().slice(0, 10);
 
-    const { results } = await c.env.DB.prepare(
-        'SELECT * FROM digests WHERE digest_date = ?'
-    ).bind(dateStr).all();
-
-    if (!results || results.length === 0) {
-        return c.json({ digest: null });
-    }
-
-    return c.json({ digest: results[0] });
+    const result = await DigestRepo.findByDate(c.env.DB, dateStr);
+    return c.json({ digest: result ?? null });
 });
 
 // ── POST /api/digest ──────────────────────────────────────
@@ -42,15 +36,11 @@ digest.post('/', async (c) => {
     const vnNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
     const dateStr = digest_date || vnNow.toISOString().slice(0, 10);
 
-    await c.env.DB.prepare(
-        `INSERT INTO digests (id, digest_date, created_at, updated_at, summary_text, total_fetched)
-         VALUES (?, ?, ?, ?, ?, 0)
-         ON CONFLICT(digest_date) DO UPDATE SET
-           summary_text = excluded.summary_text,
-           updated_at = excluded.updated_at`
-    ).bind(
-        crypto.randomUUID(), dateStr, now.toISOString(), now.toISOString(), summary_text
-    ).run();
+    await DigestRepo.upsert(c.env.DB, {
+        date: dateStr,
+        summaryText: summary_text,
+        totalFetched: 0,
+    });
 
     return c.json({ ok: true, digest_date: dateStr });
 });

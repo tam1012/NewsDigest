@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { Env } from '../../types';
+import { ArticleRepo } from '../../db';
 import { requireAdmin } from '../utils';
 
 const articles = new Hono<{ Bindings: Env }>();
@@ -12,67 +13,38 @@ articles.get('/', async (c) => {
     const tag = c.req.query('tag') || '';
     const sourceId = c.req.query('source_id') || '';
     const minHot = parseInt(c.req.query('min_hot') || '0');
-    const sort = c.req.query('sort') === 'hot' ? 'hot_score DESC' : 'published_at DESC';
+    const sort = c.req.query('sort') === 'hot' ? 'hot' as const : 'date' as const;
 
     const unsummarized = c.req.query('unsummarized');
     const compact = c.req.query('compact');
     const ids = c.req.query('ids');
-    const offset = (page - 1) * limit;
 
-    // compact=1 → chỉ trả id, title, url, source_id, published_at
-    // default → trả tất cả trừ content (content đã được NULL sau AI xử lý)
-    const fields = compact === '1'
-        ? 'id, title, url, source_id, published_at'
-        : 'id, source_id, url, title, summary, description, description_vn, hot_score, tags, published_at, fetched_at';
+    const idList = ids ? ids.split(',').map(s => s.trim()).filter(Boolean) : undefined;
 
-    let where = 'WHERE 1=1';
-    const binds: any[] = [];
+    const result = await ArticleRepo.findPaginated(c.env.DB, {
+        tag: tag || undefined,
+        sourceId: sourceId || undefined,
+        minHot,
+        from: c.req.query('from') || undefined,
+        to: c.req.query('to') || undefined,
+        ids: idList,
+        unsummarized: unsummarized === '1',
+        compact: compact === '1',
+        sort,
+        page,
+        limit,
+    });
 
-    // ids filter: GET /api/articles?ids=id1,id2,id3
-    if (ids) {
-        const idList = ids.split(',').map(s => s.trim()).filter(Boolean);
-        if (idList.length > 0) {
-            where += ` AND id IN (${idList.map(() => '?').join(',')})`;
-            binds.push(...idList);
-        }
-    }
-
-    if (tag) { where += ' AND tags LIKE ?'; binds.push(`%"${tag}"%`); }
-    if (sourceId) { where += ' AND source_id = ?'; binds.push(sourceId); }
-    if (minHot > 0) { where += ' AND hot_score >= ?'; binds.push(minHot); }
-
-    if (unsummarized === '1') { where += ' AND summary IS NULL'; }
-
-    // Date range filter (ISO 8601 UTC strings — index-friendly)
-    const from = c.req.query('from');
-    const to = c.req.query('to');
-    if (from) { where += ' AND published_at >= ?'; binds.push(from); }
-    if (to)   { where += ' AND published_at < ?';  binds.push(to); }
-
-    const countStmt = c.env.DB.prepare(`SELECT COUNT(*) as total FROM articles ${where}`);
-    const dataStmt = c.env.DB.prepare(
-        `SELECT ${fields} FROM articles ${where} ORDER BY ${sort} LIMIT ? OFFSET ?`
-    );
-
-    const countBinds = [...binds];
-    const dataBinds = [...binds, limit, offset];
-
-    const [countRes, dataRes] = await Promise.all([
-        countBinds.length > 0 ? countStmt.bind(...countBinds).all() : countStmt.all(),
-        dataBinds.length > 0 ? dataStmt.bind(...dataBinds).all() : dataStmt.all(),
-    ]);
-
-    const total = (countRes.results[0] as any)?.total || 0;
-    return c.json({ articles: dataRes.results, total, page, nextPage: offset + limit < total ? page + 1 : null });
+    return c.json({ articles: result.articles, total: result.total, page: result.page, nextPage: result.nextPage });
 });
 
 // ── GET /api/articles/:id ─────────────────────────────────
 
 articles.get('/:id', async (c) => {
     const id = c.req.param('id');
-    const { results } = await c.env.DB.prepare('SELECT * FROM articles WHERE id = ?').bind(id).all();
-    if (!results || results.length === 0) return c.json({ error: 'Not found' }, 404);
-    return c.json({ article: results[0] });
+    const article = await ArticleRepo.findById(c.env.DB, id);
+    if (!article) return c.json({ error: 'Not found' }, 404);
+    return c.json({ article });
 });
 
 // ── POST /api/articles/enrich ─────────────────────────────
@@ -91,12 +63,9 @@ articles.post('/enrich', async (c) => {
         return c.json({ error: 'ids array required' }, 400);
     }
 
-    const placeholders = ids.map(() => '?').join(',');
-    const { results } = await c.env.DB.prepare(
-        `SELECT id, url, description, content FROM articles WHERE id IN (${placeholders})`
-    ).bind(...ids).all();
+    const articleList = await ArticleRepo.findByIds(c.env.DB, ids);
 
-    if (!results || results.length === 0) {
+    if (articleList.length === 0) {
         return c.json({ ok: true, enriched: 0, message: 'No articles found' });
     }
 
@@ -122,10 +91,9 @@ articles.post('/enrich', async (c) => {
         return match ? match[1] : null;
     }
 
-    const articleList = results as any[];
     for (let i = 0; i < articleList.length; i += 5) {
         const batch = articleList.slice(i, i + 5);
-        const promises = batch.map(async (art: any) => {
+        const promises = batch.map(async (art) => {
             // Skip nếu đã có content tốt (trừ khi force=true)
             if (!force && art.content && !isLowQuality(art.content)) {
                 return { id: art.id, success: true, chars: art.content.length, skipped: true };
@@ -154,8 +122,7 @@ articles.post('/enrich', async (c) => {
                         .replace(/\n---\n[\s\S]*$/, '')
                         .trim();
                     if (cleaned.length > 50) {
-                        await c.env.DB.prepare('UPDATE articles SET content = ? WHERE id = ?')
-                            .bind(cleaned, art.id).run();
+                        await ArticleRepo.updateContent(c.env.DB, art.id, cleaned);
                         return { id: art.id, success: true, chars: cleaned.length };
                     }
                 }
@@ -164,8 +131,7 @@ articles.post('/enrich', async (c) => {
 
             const content = await extractArticleContent(fetchUrl, c.env);
             if (content && content.length > 50) {
-                await c.env.DB.prepare('UPDATE articles SET content = ? WHERE id = ?')
-                    .bind(content, art.id).run();
+                await ArticleRepo.updateContent(c.env.DB, art.id, content);
                 return { id: art.id, success: true, chars: content.length };
             }
             return { id: art.id, success: false, chars: 0, note: 'Could not extract content' };
@@ -192,12 +158,9 @@ articles.post('/enqueue-scrape', async (c) => {
     const limit = Math.min(body.limit || 50, 200);
     const force = body.force === true;
 
-    const condition = force ? '1=1' : 'summary IS NULL';
-    const { results } = await c.env.DB.prepare(
-        `SELECT id, url, title FROM articles WHERE ${condition} ORDER BY fetched_at DESC LIMIT ?`
-    ).bind(limit).all<{ id: string; url: string; title: string }>();
+    const results = await ArticleRepo.findForEnqueue(c.env.DB, limit, force);
 
-    if (!results || results.length === 0) {
+    if (results.length === 0) {
         return c.json({ ok: true, enqueued: 0, message: 'No articles to scrape' });
     }
 
@@ -247,13 +210,9 @@ articles.post('/resummarize', async (c) => {
     const limit = Math.min(body.limit || 20, 100);
     const delayMs = Math.max(body.delayMs || 3000, 1000);
 
-    const { results } = await c.env.DB.prepare(
-        `SELECT id, title, content FROM articles
-         WHERE content IS NOT NULL AND content != '' AND summary IS NULL
-         ORDER BY fetched_at DESC LIMIT ?`
-    ).bind(limit).all<{ id: string; title: string; content: string }>();
+    const results = await ArticleRepo.findForResummarize(c.env.DB, limit);
 
-    if (!results || results.length === 0) {
+    if (results.length === 0) {
         return c.json({ ok: true, summarized: 0, failed: 0, total: 0, message: 'No unsummarized articles with content found' });
     }
 
@@ -267,9 +226,7 @@ articles.post('/resummarize', async (c) => {
         try {
             const aiResult = await summarizeArticle(art.title || '', art.content, c.env);
             if (aiResult) {
-                await c.env.DB.prepare(
-                    'UPDATE articles SET description_vn = ?, summary = ?, hot_score = ?, tags = ?, content = NULL WHERE id = ?'
-                ).bind(aiResult.description_vn, aiResult.summary, aiResult.hot_score, JSON.stringify(aiResult.tags), art.id).run();
+                await ArticleRepo.updateSummary(c.env.DB, art.id, aiResult);
                 summarized++;
                 summaryResults.push({ id: art.id, title: art.title, success: true });
                 console.log(`🔄 Resummarized [${i + 1}/${results.length}]: "${art.title}" → score=${aiResult.hot_score}`);
@@ -310,20 +267,8 @@ articles.post('/summarize', async (c) => {
         return c.json({ error: 'Invalid body: results array required' }, 400);
     }
 
-    const statements = [];
-    for (const item of results) {
-        if (!item.id || !item.summary) continue;
-        statements.push(
-            c.env.DB.prepare('UPDATE articles SET summary = ?, hot_score = ?, tags = ? WHERE id = ?')
-                .bind(item.summary, item.hot_score || 5, JSON.stringify(item.tags || []), item.id)
-        );
-    }
-
-    if (statements.length > 0) {
-        await c.env.DB.batch(statements);
-    }
-
-    return c.json({ ok: true, updated: statements.length });
+    const updated = await ArticleRepo.batchUpdateSummary(c.env.DB, results);
+    return c.json({ ok: true, updated });
 });
 
 export default articles;

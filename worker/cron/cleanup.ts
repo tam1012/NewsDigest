@@ -1,4 +1,5 @@
 import { Env } from '../types';
+import { ArticleRepo } from '../db';
 
 export async function cleanOldContent(env: Env): Promise<void> {
   console.log(`🧹 Cleanup cron triggered at ${new Date().toISOString()}`);
@@ -8,12 +9,10 @@ export async function cleanOldContent(env: Env): Promise<void> {
   const oldCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   
   try {
-    const cleanupResult = await env.DB.prepare(
-      "UPDATE articles SET content = NULL WHERE summary IS NULL AND content IS NOT NULL AND published_at < ?"
-    ).bind(oldCutoff).run();
+    const changes = await ArticleRepo.cleanOldUnsummarized(env.DB, oldCutoff);
 
-    if (cleanupResult.meta && cleanupResult.meta.changes > 0) {
-      console.log(`✅ Freed content for ${cleanupResult.meta.changes} old articles (> 7 days).`);
+    if (changes > 0) {
+      console.log(`✅ Freed content for ${changes} old articles (> 7 days).`);
     } else {
       console.log(`✅ No old articles needed cleanup.`);
     }

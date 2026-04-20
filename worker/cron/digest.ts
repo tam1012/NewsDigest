@@ -1,4 +1,5 @@
 import { Env } from '../types';
+import { ArticleRepo, DigestRepo } from '../db';
 import { generateDigest } from '../ai/summarizer';
 
 /**
@@ -19,18 +20,13 @@ export async function scheduledDigest(env: Env) {
   const dayStartUTC = new Date(`${digestDate}T00:00:00+07:00`);
   const dayEndUTC = new Date(dayStartUTC.getTime() + 24 * 60 * 60 * 1000);
 
-  const { results } = await env.DB.prepare(
-    `SELECT id, title, summary, hot_score
-     FROM articles
-     WHERE summary IS NOT NULL
-       AND published_at >= ?
-       AND published_at < ?
-     ORDER BY hot_score DESC
-     LIMIT 50`
-  ).bind(dayStartUTC.toISOString(), dayEndUTC.toISOString())
-    .all<{ id: string; title: string; summary: string; hot_score: number }>();
+  const results = await ArticleRepo.findForDigest(
+    env.DB,
+    dayStartUTC.toISOString(),
+    dayEndUTC.toISOString()
+  );
 
-  if (!results || results.length === 0) {
+  if (results.length === 0) {
     console.log(`📰 No summarized articles for ${digestDate}, skipping digest.`);
     return;
   }
@@ -44,24 +40,11 @@ export async function scheduledDigest(env: Env) {
       return;
     }
 
-    const nowISO = now.toISOString();
-
-    // UPSERT: INSERT nếu chưa có, UPDATE nếu đã tồn tại
-    await env.DB.prepare(
-      `INSERT INTO digests (id, digest_date, created_at, updated_at, summary_text, total_fetched)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(digest_date) DO UPDATE SET
-         summary_text = excluded.summary_text,
-         updated_at = excluded.updated_at,
-         total_fetched = excluded.total_fetched`
-    ).bind(
-      crypto.randomUUID(),
-      digestDate,
-      nowISO,
-      nowISO,
-      digest.digest_text,
-      results.length
-    ).run();
+    await DigestRepo.upsert(env.DB, {
+      date: digestDate,
+      summaryText: digest.digest_text,
+      totalFetched: results.length,
+    });
 
     console.log(`📰 Digest saved for ${digestDate} (${digest.digest_text.length} chars, ${results.length} articles)`);
   } catch (err: any) {

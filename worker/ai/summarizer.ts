@@ -1,5 +1,14 @@
 import { Env } from '../types';
 import { ProhibitedContentError } from '../errors';
+import { buildPromptConfig, PromptConfig } from './prompt-config';
+import {
+  buildSystemPrompt,
+  buildDigestPrompt,
+  buildFallbackStep1System, buildFallbackStep1User,
+  buildFallbackStep2System, buildFallbackStep2User,
+  FALLBACK_STEP3_SYSTEM, buildFallbackStep3User,
+  buildFallbackStep4System, buildFallbackStep4User,
+} from './prompts';
 
 export { ProhibitedContentError };
 
@@ -14,94 +23,6 @@ export interface DigestResult {
   digest_text: string;
 }
 
-const SYSTEM_PROMPT = `
-<role>
-Bạn là một AI news analyst chuyên phân tích và tóm tắt tin tức công nghệ cho độc giả Việt Nam.
-</role>
-
-<task>
-Phân tích bài viết được cung cấp và trả về JSON duy nhất với 4 trường sau:
-</task>
-
-<output_schema>
-{
-  "description_vn": "Tổng quan 2-3 câu tiếng Việt ngắn gọn, nêu được ý chính của bài",
-  "summary": "Tóm tắt ĐẦY ĐỦ bằng Markdown. Sử dụng ## tiêu đề, bullet points (- ), **in đậm** từ khoá quan trọng. Mức độ chi tiết đủ để người đọc không cần đọc bài gốc.",
-  "hot_score": <số nguyên 1–10>,
-  "tags": ["tag1", "tag2"]
-}
-</output_schema>
-
-<hot_score_criteria>
-9–10 : Breaking news quan trọng, release AI lớn, sự kiện ảnh hưởng đến toàn ngành
-7–8  : Tin hay, insight sâu, ảnh hưởng rộng, đáng quan tâm
-5–6  : Tin bình thường, cập nhật thông tin hữu ích
-3–4  : Giá trị thấp, quá chuyên biệt hoặc cũ
-1–2  : Spam, quảng cáo, không liên quan
-</hot_score_criteria>
-
-<topic_priorities>
-Ưu tiên cho các chủ đề sau (score cao hơn):
-- **AI / LLM**: model mới, benchmark, ứng dụng thực tế
-- **Security**: lỗ hổng, data breach, CVE nghiêm trọng
-- **Dev Tools**: framework, ngôn ngữ, công cụ phát triển
-- **Startup / Business**: funding lớn, M&A, ra mắt sản phẩm
-</topic_priorities>
-
-<tags_allowed>
-AI, Tech, Security, Business, Vietnam, World, Dev, Science, Crypto, Policy, Entertainment
-</tags_allowed>
-
-<rules>
-- Giữ nguyên thuật ngữ kỹ thuật (AI, API, Docker, LLM, v.v.)
-- Bài tiếng Anh → bắt buộc tóm tắt bằng tiếng Việt
-- CHỈ trả về JSON hợp lệ, KHÔNG có text hay markdown bên ngoài JSON
-</rules>
-`;
-
-const DIGEST_PROMPT = `
-<role>
-Bạn là AI news editor chuyên tổng hợp bản tin công nghệ hàng ngày cho độc giả Việt Nam.
-</role>
-
-<task>
-Từ danh sách các bài viết đã được tóm tắt (mỗi bài có ID riêng), viết 1 bản digest tổng hợp xu hướng trong ngày.
-Bản digest PHẢI được viết bằng Markdown có cấu trúc rõ ràng, dễ đọc.
-TRONG bản digest, khi nhắc đến thông tin từ bài viết cụ thể, hãy ghi chú inline reference bằng cú pháp <id:UUID_CỦA_BÀI> ngay sau câu/ý liên quan.
-</task>
-
-<output_schema>
-{
-  "digest_text": "Markdown có cấu trúc: đoạn tổng quan + các heading theo chủ đề + bullet points."
-}
-</output_schema>
-
-<format>
-Cấu trúc bắt buộc:
-1. Mở đầu bằng 1 đoạn tổng quan ngắn (2-3 câu) tóm tắt bức tranh chung trong ngày
-2. Tiếp theo chia thành các nhóm chủ đề, mỗi nhóm có heading ## và các bullet points
-3. Mỗi bullet point là 1-2 câu ngắn gọn, **in đậm** keyword/tên sản phẩm quan trọng
-4. Đặt <id:uuid> ngay cuối bullet point liên quan
-5. Chỉ tạo heading cho nhóm có nội dung, không tạo nhóm rỗng
-</format>
-
-<example>
-{
-  "digest_text": "Ngày hôm nay chứng kiến nhiều chuyển động lớn trong lĩnh vực AI và bảo mật, đặc biệt là cuộc đua tối ưu mô hình ngôn ngữ lớn và các vấn đề an ninh mạng đáng lo ngại.\n\n## AI & LLM\n\n- **Google** công bố Gemini 3.0 với khả năng reasoning vượt trội, đạt điểm cao nhất trên nhiều benchmark <id:def45678-90ab-cdef-1234-567890abcdef>\n- Xu hướng chạy mô hình AI trực tiếp trên trình duyệt đang bùng nổ nhờ kỹ thuật quantization mới <id:99c696e9-0c08-45ea-8359-49fb3ba134f5>\n\n## Bảo mật\n\n- Lỗ hổng nghiêm trọng trong **OpenSSL** ảnh hưởng đến hàng triệu server, các chuyên gia khuyến cáo cập nhật ngay <id:abc12345-6789-0def-ghij-klmnopqrstuv>"
-}
-</example>
-
-<rules>
-- digest_text: viết bằng Markdown, chia theo chủ đề (## heading), dùng bullet points (- )
-- Mỗi bullet 1-2 câu ngắn gọn, in đậm keyword/tên sản phẩm quan trọng
-- Bắt đầu bằng 1 đoạn tổng quan ngắn trước khi vào chi tiết
-- PHẢI inline reference <id:UUID> khi nhắc đến thông tin từ bài cụ thể
-- Mỗi bài quan trọng nên được reference ít nhất 1 lần
-- Không cần reference tất cả bài, chỉ những bài đáng chú ý (hot_score >= 6)
-- CHỈ trả về JSON hợp lệ, KHÔNG có text hay markdown bên ngoài JSON
-- Các heading gợi ý: AI & LLM, Bảo mật, Công cụ & Hạ tầng, Startup & Kinh doanh, Chính sách & Xã hội (chỉ dùng heading phù hợp với nội dung có)
-</rules>
-`;
 
 // ── Model Pool ────────────────────────────────────────────────────────────
 // Hai model Gemma 4 cùng rate limit (RPM=15, TPM=Unlimited, RPD=1500).
@@ -363,38 +284,39 @@ function validateSummary(result: any): result is SummaryResult {
 }
 
 // ── Multi-Step Fallback (plain text, no JSON) ─────────────────────────────
-// Khi JSON mode fail → gọi 4 lần riêng biệt, mỗi lần hỏi 1 field
-const ALLOWED_TAGS = ['AI', 'Tech', 'Security', 'Business', 'Vietnam', 'World', 'Dev', 'Science', 'Crypto', 'Policy', 'Entertainment'];
+// When JSON mode fails → 4 separate calls, one per field.
 
 async function summarizeArticleFallback(
   title: string,
   truncatedContent: string,
   env: Env,
+  config: PromptConfig,
 ): Promise<SummaryResult> {
   const model = pickModel();
+  const lang = config.outputLanguage;
   console.log(`🔄 Fallback: using ${model} multi-step for "${title.slice(0, 60)}"`);
 
-  // Step 1: description_vn
+  // Step 1: short overview
   const description_vn = cleanFallbackResponse(await callGeminiPlainText(
     env,
-    'Bạn là trợ lý tóm tắt tin tức. Luôn trả lời bằng tiếng Việt. Chỉ trả về nội dung tóm tắt, KHÔNG lặp lại đề bài, KHÔNG thêm ghi chú hay giải thích.',
-    `Tóm tắt bài viết sau trong 2-3 câu tiếng Việt:\n\n${title}\n\n${truncatedContent}`,
+    buildFallbackStep1System(lang),
+    buildFallbackStep1User(lang, title, truncatedContent),
   ));
   console.log(`  ✅ Step 1/4 description_vn (${description_vn.length} chars)`);
 
-  // Step 2: summary (markdown)
+  // Step 2: full markdown summary
   const summary = cleanFallbackResponse(await callGeminiPlainText(
     env,
-    'Bạn là trợ lý tóm tắt tin tức công nghệ. Luôn viết bằng tiếng Việt. Trả về tóm tắt dạng Markdown có cấu trúc. Giữ nguyên thuật ngữ kỹ thuật (AI, API, LLM, v.v.). KHÔNG lặp lại đề bài, KHÔNG thêm ghi chú.',
-    `Viết tóm tắt chi tiết bằng Markdown cho bài viết sau. Dùng ## cho heading, - cho bullet point, **bold** cho từ khóa quan trọng.\n\n${title}\n\n${truncatedContent}`,
+    buildFallbackStep2System(lang),
+    buildFallbackStep2User(lang, title, truncatedContent),
   ));
   console.log(`  ✅ Step 2/4 summary (${summary.length} chars)`);
 
   // Step 3: hot_score
   const scoreRaw = await callGeminiPlainText(
     env,
-    'Bạn là chuyên gia đánh giá tin tức tech. Chỉ trả về DUY NHẤT 1 con số từ 1 đến 10. Không giải thích.',
-    `Chấm điểm mức độ quan trọng (1=thấp, 10=rất hot):\n\n${title}\n${description_vn}`,
+    FALLBACK_STEP3_SYSTEM,
+    buildFallbackStep3User(title, description_vn),
   );
   const scoreMatch = scoreRaw.match(/\d+/);
   const hot_score = Math.max(1, Math.min(10, scoreMatch ? parseInt(scoreMatch[0], 10) : 5));
@@ -403,13 +325,13 @@ async function summarizeArticleFallback(
   // Step 4: tags
   const tagsRaw = await callGeminiPlainText(
     env,
-    `Bạn là hệ thống gắn tag. Chỉ trả về các tag cách nhau bởi dấu phẩy. KHÔNG giải thích. Tags hợp lệ: ${ALLOWED_TAGS.join(', ')}`,
-    `Chọn tối đa 3 tags phù hợp nhất:\n\n${title}\n${description_vn}`,
+    buildFallbackStep4System(config.allowedTags),
+    buildFallbackStep4User(title, description_vn),
   );
   const tags = tagsRaw
     .split(',')
-    .map(t => t.trim().replace(/[^a-zA-Z]/g, ''))
-    .filter(t => ALLOWED_TAGS.includes(t))
+    .map((t) => t.trim().replace(/[^a-zA-Z]/g, ''))
+    .filter((t) => config.allowedTags.includes(t))
     .slice(0, 3);
   console.log(`  ✅ Step 4/4 tags = [${tags.join(', ')}]`);
 
@@ -428,12 +350,15 @@ export async function summarizeArticle(
   content: string,
   env: Env,
 ): Promise<SummaryResult | null> {
+  const config = buildPromptConfig(env);
+  const systemPrompt = buildSystemPrompt(config);
+
   const truncated = content.length > 15000 ? content.slice(0, 15000) + '...' : content;
-  const userPrompt = `Tiêu đề: ${title}\n\nNội dung:\n${truncated}`;
+  const userPrompt = `Title: ${title}\n\nContent:\n${truncated}`;
 
   // ── Try JSON mode (with retry) ──
   try {
-    const result = await callGeminiWithJsonRetry<SummaryResult>(env, SYSTEM_PROMPT, userPrompt);
+    const result = await callGeminiWithJsonRetry<SummaryResult>(env, systemPrompt, userPrompt);
 
     if (!validateSummary(result)) {
       console.log(`⚠️ Invalid AI structure for "${title}": ${JSON.stringify(result).slice(0, 100)}`);
@@ -452,7 +377,7 @@ export async function summarizeArticle(
 
   // ── Last resort: multi-step plain text ──
   try {
-    return await summarizeArticleFallback(title, truncated, env);
+    return await summarizeArticleFallback(title, truncated, env, config);
   } catch (fallbackErr: any) {
     // Content permanently blocked — propagate immediately, no more retries
     if (fallbackErr instanceof ProhibitedContentError) throw fallbackErr;
@@ -472,40 +397,43 @@ export async function generateDigest(
 ): Promise<DigestResult | null> {
   if (articles.length === 0) return null;
 
+  const config = buildPromptConfig(env);
+  const digestPrompt = buildDigestPrompt(config);
+
   const formatted = articles
     .map((a) => `ID: ${a.id}\nTitle: ${a.title}\nSummary: ${a.summary}\nScore: ${a.hot_score}`)
     .join('\n---\n');
-  const userPrompt = `Phân tích và tổng hợp ${articles.length} bài viết trong ngày hôm nay:\n\n${formatted}`;
+  const userPrompt = `Analyze and synthesize ${articles.length} articles from today:\n\n${formatted}`;
 
-  const DIGEST_TIMEOUT = 120000; // 120s — digest prompt lớn hơn (40+ bài)
+  const DIGEST_TIMEOUT = 120000; // 120s — digest prompt is large (40+ articles)
 
   // ── Try JSON mode (with retry) ──
   try {
-    const result = await callGeminiWithJsonRetry<DigestResult>(env, DIGEST_PROMPT, userPrompt, DIGEST_TIMEOUT);
+    const result = await callGeminiWithJsonRetry<DigestResult>(env, digestPrompt, userPrompt, DIGEST_TIMEOUT);
     if (result.digest_text) return result;
     console.log('⚠️ Invalid digest structure');
   } catch (err: any) {
     console.log(`⚠️ JSON mode digest failed: ${err.message}`);
   }
 
-  // ── Last resort: plain text (digest chỉ cần 1 field) ──
+  // ── Last resort: plain text (digest only needs 1 field) ──
   try {
     console.log(`🔄 Trying plain text mode for digest...`);
     const rawText = cleanFallbackResponse(await callGeminiPlainText(
       env,
-      DIGEST_PROMPT,
+      digestPrompt,
       userPrompt,
       undefined,
       DIGEST_TIMEOUT,
     ));
 
-    // Model có thể trả JSON cả trong plain text mode → thử parse digest_text ra
+    // Model may return JSON even in plain text mode → try to extract digest_text
     let digestText = rawText;
     try {
       const parsed = extractJson<DigestResult>(rawText);
       if (parsed.digest_text) digestText = parsed.digest_text;
     } catch {
-      // Không phải JSON → dùng raw text luôn
+      // Not JSON → use raw text as-is
     }
 
     if (digestText && digestText.length > 50) {
