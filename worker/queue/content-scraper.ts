@@ -41,6 +41,11 @@ export async function handleContentQueue(
         if (content) {
           await ArticleRepo.updateContent(env.DB, articleId, content);
           console.log(`✅ Scraped content for ${url} (${content.length} chars)`);
+        } else if (status?.description && status.description.length > 200) {
+          // Fallback: dùng RSS description nếu scraping không lấy được nội dung
+          // (ví dụ: trang dùng client-side rendering như Cloudflare blog/Astro)
+          content = status.description;
+          console.log(`⚠️ No content scraped for ${url} — falling back to RSS description (${content.length} chars)`);
         }
       } else {
         console.log(`✨ Reusing existing content for "${title}" (${content.length} chars)`);

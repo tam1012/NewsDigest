@@ -117,21 +117,23 @@ export function isLikelyArticlePage(pageUrl: string, html: string): boolean {
     const path = u.pathname.toLowerCase().replace(/\/+$/, '');
     const segments = path.split('/').filter(Boolean);
 
-    if (segments.length < 2) return false;
+    // Loại trừ sớm các trang utility / listing rõ ràng
     if (/(^|\/)(category|categories|tag|tags|author|authors|topics|topic)(\/|$)/.test(path)) return false;
     if (/\/page\/\d+\/?$/.test(path)) return false;
-    // Loại trừ trang utility không phải bài viết
     if (/(^|\/)(docs|documentation|help|faq|about|careers|privacy|terms|contact|search|pricing|changelog)(\/|$)/.test(path)) return false;
 
     const compact = html.replace(/\s+/g, ' ').slice(0, 200000).toLowerCase();
 
-    // Schema.org — tín hiệu mạnh nhất
+    // Schema.org — tín hiệu mạnh nhất (check trước segment count)
     if (compact.includes('"@type":"blogposting"') || compact.includes('"@type": "blogposting"')) return true;
     if (compact.includes('"@type":"newsarticle"') || compact.includes('"@type": "newsarticle"')) return true;
 
-    // Open Graph article type
+    // Open Graph article type (check trước segment count — một số blog có path 1 segment)
     if (/property=["']og:type["'][^>]*content=["']article["']/i.test(compact) ||
         /content=["']article["'][^>]*property=["']og:type["']/i.test(compact)) return true;
+
+    // Với URL ít segment, chỉ chấp nhận nếu đã có tín hiệu mạnh ở trên
+    if (segments.length < 2) return false;
 
     // Có thẻ <article> với nội dung thực
     if (/<article[^>]*>[\s\S]{200,}<\/article>/i.test(html)) return true;
