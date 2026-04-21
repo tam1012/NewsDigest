@@ -14,7 +14,7 @@
   </div>
 
   <div
-    class="feature-card flex border border-border/50 rounded-2xl overflow-hidden divide-y divide-border/50 flex-col"
+    class="feature-card flex border border-border/30 rounded-2xl overflow-hidden divide-y divide-border/50 flex-col"
   >
     <!-- Card 1: text left, SVG right -->
     <div class="grid grid-cols-[2fr_3fr] bg-bg-2 overflow-hidden min-h-[200px]">
@@ -25,7 +25,7 @@
         </p>
       </div>
       <div
-        class="flex bg-bg-1 dark:bg-bg-1/50 border-l border-border/50 items-center justify-center p-6"
+        class="flex bg-bg-1/50 border-l border-border/30 items-center justify-center p-6"
       >
         <WelcomeSvg1 />
       </div>
@@ -37,7 +37,7 @@
       style="animation-delay: 1.9s;"
     >
       <div
-        class="flex bg-bg-1 dark:bg-bg-1/50 border-r border-border/50 items-center justify-center p-6"
+        class="flex bg-bg-1/50 border-r border-border/30 items-center justify-center p-6"
       >
         <WelcomeSvg2 />
       </div>
