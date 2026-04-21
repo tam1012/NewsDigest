@@ -33,7 +33,7 @@
   function playPress(el: HTMLSpanElement | null) {
     el?.animate([{ scale: '1' }, { scale: '0.85' }, { scale: '1' }], {
       duration: 400,
-      easing: 'cubic-bezier(.22,1,.36,1)',
+      easing: 'cubic-bezier(0, 0.55, 0.45, 1)',
     })
   }
 

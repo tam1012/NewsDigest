@@ -435,7 +435,12 @@
 
     // If WelcomePanel is showing (no article selected on desktop), dismiss it
     // by selecting the first article when any shortcut key is pressed
-    if (isFirstVisit && !selectedArticle && !mobileMode && navArticles.length > 0) {
+    if (
+      isFirstVisit &&
+      !selectedArticle &&
+      !mobileMode &&
+      navArticles.length > 0
+    ) {
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         e.preventDefault()
         selectArticle(navArticles[0])
@@ -518,7 +523,7 @@
           class="size-12"
           title="Đổi cỡ chữ"
         >
-            <CaseSensitive size={18} />
+          <CaseSensitive size={18} />
         </CusButton>
         <ThemeToggle
           darkMode={$prefs.darkMode}
@@ -572,11 +577,16 @@
     <!-- Active filter bar (mobile) -->
     {#if hasActiveFilter}
       <div class="flex text-lg items-center gap-2 px-4 py-2">
-        <span class="text-text-main font-bold truncate">{activeFilterLabel}</span>
+        <span class="text-text-main font-bold truncate"
+          >{activeFilterLabel}</span
+        >
         <span class="ml-2 text-text-secondary tabular-nums shrink-0"
           >{filteredArticles.length}</span
         >
-        <CusButton onclick={clearFilters} class="ml-auto size-12 sm:size-8 shrink-0">
+        <CusButton
+          onclick={clearFilters}
+          class="ml-auto size-12 sm:size-8 shrink-0"
+        >
           <X size={20} />
         </CusButton>
       </div>
@@ -692,7 +702,9 @@
         style="font-size: var(--font-size-base);"
       >
         <!-- Title -->
-        <h2 class="text-2xl mb-8 font-serif text-text-main text-center font-bold">
+        <h2
+          class="text-2xl mb-8 font-serif text-text-main text-center font-bold"
+        >
           {formattedDate}
         </h2>
         <!-- Active filter bar (desktop) -->
@@ -760,7 +772,7 @@
             ($prefs.fontSize = cycleFontSize($prefs.fontSize))}
         />
       {:else}
-        <div class="h-full flex items-center justify-center">
+        <div class="h-full flex py-13 justify-center">
           <WelcomePanel />
         </div>
       {/if}
