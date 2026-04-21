@@ -14,27 +14,31 @@
   </div>
 
   <div
-    class="feature-card flex border border-border rounded-2xl overflow-hidden divide-y divide-border flex-col"
+    class="feature-card flex border border-border/50 rounded-2xl overflow-hidden divide-y divide-border/50 flex-col"
   >
     <!-- Card 1: text left, SVG right -->
-    <div class="grid grid-cols-[2fr_3fr] bg-bg-2 overflow-hidden min-h-[180px]">
+    <div class="grid grid-cols-[2fr_3fr] bg-bg-2 overflow-hidden min-h-[200px]">
       <div class="flex flex-col justify-end p-6">
         <h3 class="text-base font-semibold text-text-main mb-1.5">Phím tắt</h3>
         <p class="text-[13px] leading-relaxed text-text-secondary m-0">
           Bạn có thể nhấn phím mũi tên trên bàn phím để chuyển nhanh tin tức
         </p>
       </div>
-      <div class="flex bg-bg-1 items-center justify-center p-6">
+      <div
+        class="flex bg-bg-1 dark:bg-bg-1/50 border-l border-border/50 items-center justify-center p-6"
+      >
         <WelcomeSvg1 />
       </div>
     </div>
 
     <!-- Card 2: SVG left, text right -->
     <div
-      class="grid grid-cols-[3fr_2fr] bg-bg-2 overflow-hidden min-h-[180px]"
+      class="grid grid-cols-[3fr_2fr] bg-bg-2 overflow-hidden min-h-[200px]"
       style="animation-delay: 1.9s;"
     >
-      <div class="flex bg-bg-1 items-center justify-center p-6">
+      <div
+        class="flex bg-bg-1 dark:bg-bg-1/50 border-r border-border/50 items-center justify-center p-6"
+      >
         <WelcomeSvg2 />
       </div>
       <div class="flex flex-col justify-end p-6">

@@ -4,24 +4,12 @@
   import { goto } from '$app/navigation'
   import { filters } from '$lib/stores/articles.svelte'
   import { prefs, cycleFontSize } from '$lib/stores/prefs'
-  import {
-    CaseSensitive,
-    ChevronLeft,
-    ChevronRight,
-    Clock,
-    Link2,
-    Loader2,
-    Moon,
-    Sparkles,
-    Sun,
-    X,
-  } from 'lucide-svelte'
+  import { CaseSensitive, Loader2, Sparkles, X } from 'lucide-svelte'
   import type { Article } from '$lib/types'
   import { sources } from '$lib/stores/sources'
   import { api } from '$lib/api'
   import { marked } from 'marked'
   import { OverlayScrollbarsComponent } from 'overlayscrollbars-svelte'
-  import { slideScaleFade } from '$lib/transitions/slideScaleFade'
   import CusButton from '$lib/components/ui/CusButton.svelte'
   import CusButtonTab from '$lib/components/ui/CusButtonTab.svelte'
   import { articleCache } from '$lib/stores/articleCache.svelte'
@@ -30,6 +18,13 @@
   import PullToRefresh from '$lib/components/app/PullToRefresh.svelte'
   import WelcomePanel from '$lib/components/app/WelcomePanel.svelte'
   import { getStoredAdminKey } from '$lib/admin'
+  import DateNavigator from '$lib/components/app/DateNavigator.svelte'
+  import ThemeToggle from '$lib/components/app/ThemeToggle.svelte'
+  import ArticleListSkeleton from '$lib/components/app/ArticleListSkeleton.svelte'
+  import DigestView from '$lib/components/app/DigestView.svelte'
+  import ArticleListItem from '$lib/components/app/ArticleListItem.svelte'
+  import ArticleDetail from '$lib/components/app/ArticleDetail.svelte'
+  import EnqueueToast from '$lib/components/app/EnqueueToast.svelte'
 
   let { data } = $props()
 
@@ -437,6 +432,17 @@
     }
     const tag = (e.target as HTMLElement)?.tagName
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+
+    // If WelcomePanel is showing (no article selected on desktop), dismiss it
+    // by selecting the first article when any shortcut key is pressed
+    if (isFirstVisit && !selectedArticle && !mobileMode && navArticles.length > 0) {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault()
+        selectArticle(navArticles[0])
+        return
+      }
+    }
+
     if (e.key === 'ArrowLeft') {
       e.preventDefault()
       goToPrevArticle()
@@ -487,7 +493,7 @@
 </svelte:head>
 
 <!-- ═══════════════ MOBILE LAYOUT ═══════════════ -->
-<div class=" md:hidden">
+<div class="md:hidden">
   <div
     class="fixed top-0 left-2 right-2 h-6 pointer-events-none bg-linear-to-b from-10% from-bg-1 to-bg-1/0 z-40"
   ></div>
@@ -499,24 +505,12 @@
         ? 'none'
         : 'auto'}; transition: opacity 0.2s ease;"
     >
-      <div class="flex gap-2">
-        <CusButton onclick={() => goToDate(-1)} class="size-12">
-          <ChevronLeft class="-translate-x-px" size={20} />
-        </CusButton>
-        <!-- <CusButton class="h-10 w-24 text-sm">{formattedDate}</CusButton> -->
-        <CusButton
-          onclick={() => !isToday && goToDate(1)}
-          class="size-12"
-          disabled={isToday}
-        >
-          <div
-            class="transition-opacity duration-200"
-            class:opacity-50={isToday}
-          >
-            <ChevronRight class="translate-x-px" size={20} />
-          </div>
-        </CusButton>
-      </div>
+      <DateNavigator
+        {isToday}
+        onPrev={() => goToDate(-1)}
+        onNext={() => goToDate(1)}
+        class="size-12"
+      />
       <div class="flex gap-2">
         <!-- svelte-ignore a11y_consider_explicit_label -->
         <CusButton
@@ -524,71 +518,26 @@
           class="size-12"
           title="Đổi cỡ chữ"
         >
-          <CaseSensitive size={18} />
+            <CaseSensitive size={18} />
         </CusButton>
-        <!-- svelte-ignore a11y_consider_explicit_label -->
-        <CusButton
-          onclick={() => ($prefs.darkMode = !$prefs.darkMode)}
+        <ThemeToggle
+          darkMode={$prefs.darkMode}
+          onToggle={() => ($prefs.darkMode = !$prefs.darkMode)}
           class="size-12"
-        >
-          <div class="grid place-items-center">
-            {#if $prefs.darkMode}
-              <div
-                class="col-start-1 row-start-1"
-                in:slideScaleFade={{
-                  duration: 250,
-                  startScale: 0.5,
-                  startOpacity: 0,
-                }}
-                out:slideScaleFade={{
-                  duration: 200,
-                  startScale: 0.5,
-                  startOpacity: 0,
-                }}
-              >
-                <Sun size={16} />
-              </div>
-            {:else}
-              <div
-                class="col-start-1 row-start-1"
-                in:slideScaleFade={{
-                  duration: 250,
-                  startScale: 0.5,
-                  startOpacity: 0,
-                }}
-                out:slideScaleFade={{
-                  duration: 200,
-                  startScale: 0.5,
-                  startOpacity: 0,
-                }}
-              >
-                <Moon size={16} />
-              </div>
-            {/if}
-          </div>
-        </CusButton>
+        />
       </div>
     </nav>
+
     <!-- Enqueue toast (mobile) -->
-    {#if showEnqueueToast}
-      <div
-        class="fixed z-50 bottom-24 left-4 right-4 flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium shadow-lg"
-        style="background: var(--color-bg-1); border: 1px solid color-mix(in srgb, currentColor 12%, transparent);"
-        in:slideScaleFade={{ duration: 250, startScale: 0.92, startOpacity: 0 }}
-        out:slideScaleFade={{
-          duration: 200,
-          startScale: 0.92,
-          startOpacity: 0,
-        }}
-      >
-        <Sparkles size={14} class="shrink-0 text-violet-500" />
-        <span
-          >Đã xếp hàng <strong>{lastEnqueued}</strong> bài · hoàn tất sau {aiEstimateLabel}</span
-        >
-      </div>
-    {/if}
+    <EnqueueToast
+      show={showEnqueueToast}
+      count={lastEnqueued}
+      estimateLabel={aiEstimateLabel}
+      variant="mobile"
+    />
+
     <div
-      class=" fixed z-40 flex gap-2 justify-between bottom-0 px-8 pb-8 pt-4 w-full bg-linear-to-t from-bg-1 to-bg-1/0"
+      class="fixed z-40 flex gap-2 justify-between bottom-0 px-8 pb-8 pt-4 w-full bg-linear-to-t from-bg-1 to-bg-1/0"
     >
       {#if isAdmin && unsummarizedCount > 0 && !aiButtonHidden}
         <!-- svelte-ignore a11y_consider_explicit_label -->
@@ -613,26 +562,21 @@
         tab1Label="News"
         tab2Label="Digest"
       />
-
       <SourceFilter {articles} size="md" />
     </div>
 
     <h2 class="text-2xl mb-8 font-serif text-text-main text-center font-bold">
       {formattedDate}
     </h2>
+
     <!-- Active filter bar (mobile) -->
     {#if hasActiveFilter}
       <div class="flex text-lg items-center gap-2 px-4 py-2">
-        <span class="text-text-main font-bold truncate"
-          >{activeFilterLabel}</span
-        >
-        <span class=" ml-2 text-text-secondary tabular-nums shrink-0"
+        <span class="text-text-main font-bold truncate">{activeFilterLabel}</span>
+        <span class="ml-2 text-text-secondary tabular-nums shrink-0"
           >{filteredArticles.length}</span
         >
-        <CusButton
-          onclick={clearFilters}
-          class="ml-auto size-12 sm:size-8  shrink-0"
-        >
+        <CusButton onclick={clearFilters} class="ml-auto size-12 sm:size-8 shrink-0">
           <X size={20} />
         </CusButton>
       </div>
@@ -646,88 +590,23 @@
     >
       <div class="mobile-content" style="font-size: var(--font-size-base);">
         {#if loading}
-          <div class="skeleton-container flex flex-col gap-8 animate-pulse">
-            {#each Array(6) as _}
-              <div>
-                <div class="flex items-center gap-2 mb-2">
-                  <div
-                    class="h-3 w-20 rounded bg-zinc-200 dark:bg-zinc-800"
-                  ></div>
-                  <div
-                    class="h-3 w-10 rounded bg-zinc-200 dark:bg-zinc-800"
-                  ></div>
-                </div>
-                <div
-                  class="h-5 w-full rounded bg-zinc-200 dark:bg-zinc-800 mb-2"
-                ></div>
-                <div
-                  class="h-4 w-3/4 rounded bg-zinc-200 dark:bg-zinc-800 mb-1"
-                ></div>
-                <div
-                  class="h-4 w-1/2 rounded bg-zinc-200 dark:bg-zinc-800"
-                ></div>
-              </div>
-            {/each}
-          </div>
+          <ArticleListSkeleton />
         {:else if sideView === 'digest'}
-          {#if digest}
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div
-              class="prose prose-sm max-w-none text-text-main-2 prose-headings:text-text-main! prose-p:text-text-main-2! prose-li:text-text-main-2! prose-a:text-text-main-2! prose-strong:text-text-main! prose-headings:text-base prose-headings:mt-6 prose-headings:mb-2 prose-p:leading-relaxed pb-16"
-              onclick={handleDigestClick}
-            >
-              {@html parsedDigestHtml}
-            </div>
-          {:else}
-            <div
-              class="text-sm text-zinc-500 py-10 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl"
-            >
-              Chưa có bản tin tổng hợp cho ngày này.
-            </div>
-          {/if}
+          <DigestView
+            {digest}
+            parsedHtml={parsedDigestHtml}
+            onArticleClick={handleDigestClick}
+            class="pb-16"
+          />
         {:else}
           <div class="flex flex-col gap-8 pb-24">
             {#each filteredArticles as article (article.id)}
-              <!-- svelte-ignore a11y_click_events_have_key_events -->
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <div
-                class="cursor-pointer relative group"
+              <ArticleListItem
+                {article}
+                sourceName={getSourceName(article.source_id)}
                 onclick={() => selectArticle(article)}
-              >
-                <div
-                  class="flex items-center text-[0.675em] text-text-secondary uppercase tracking-wider mb-1"
-                >
-                  <span class="truncate pr-4"
-                    >{getSourceName(article.source_id)}</span
-                  >
-                  <span class="whitespace-nowrap shrink-0">
-                    {new Date(
-                      article.published_at || article.fetched_at,
-                    ).toLocaleTimeString('vi-VN', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </span>
-                </div>
-                <h3
-                  class="font-serif text-[1.125em] leading-[1.4] mb-2 font-semibold text-text-main group-hover:underline underline-offset-4 transition-all line-clamp-4 wrap-break-word"
-                >
-                  {@html article.title}
-                </h3>
-                <p
-                  class="text-[1em] text-text-main-2/70 leading-relaxed line-clamp-10 wrap-break-word"
-                >
-                  {article.description_vn ||
-                    article.description ||
-                    article.summary
-                      ?.replace(/<[^>]*>?/gm, '')
-                      .substring(0, 150) ||
-                    'Đang xử lý nội dung...'}
-                </p>
-              </div>
+              />
             {/each}
-
             {#if filteredArticles.length === 0}
               <div
                 class="text-sm text-zinc-500 py-10 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl"
@@ -758,27 +637,13 @@
   <div class="flex mx-auto max-w-340 sm:px-6">
     <aside class="h-svh sticky top-0 border-r w-88 lg:w-108 flex flex-col">
       <!-- Top Header / Navigator -->
-      <nav
-        class=" absolute z-10 flex justify-between px-6 top-6 left-0 right-0"
-      >
-        <div class="flex gap-1">
-          <CusButton onclick={() => goToDate(-1)} class="size-8">
-            <ChevronLeft class="-translate-x-px" size={20} />
-          </CusButton>
-          <!-- <CusButton class="h-8 w-24 text-sm">{formattedDate}</CusButton> -->
-          <CusButton
-            onclick={() => !isToday && goToDate(1)}
-            class="size-8"
-            disabled={isToday}
-          >
-            <div
-              class="transition-opacity duration-200"
-              class:opacity-50={isToday}
-            >
-              <ChevronRight class="translate-x-px" size={20} />
-            </div>
-          </CusButton>
-        </div>
+      <nav class="absolute z-10 flex justify-between px-6 top-6 left-0 right-0">
+        <DateNavigator
+          {isToday}
+          onPrev={() => goToDate(-1)}
+          onNext={() => goToDate(1)}
+          class="size-8"
+        />
         <div class="flex gap-2">
           <CusButtonTab
             value={sideView !== 'digest'}
@@ -806,93 +671,12 @@
             </CusButton>
           {/if}
           <!-- Enqueue toast (desktop) -->
-          {#if showEnqueueToast}
-            <div
-              class="flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium"
-              style="background: color-mix(in srgb, var(--color-bg-1) 80%, transparent); border: 1px solid color-mix(in srgb, currentColor 12%, transparent);"
-              in:slideScaleFade={{
-                duration: 250,
-                startScale: 0.92,
-                startOpacity: 0,
-              }}
-              out:slideScaleFade={{
-                duration: 200,
-                startScale: 0.92,
-                startOpacity: 0,
-              }}
-            >
-              <Sparkles size={12} class="text-violet-500 shrink-0" />
-              <span>{lastEnqueued} bài · {aiEstimateLabel}</span>
-            </div>
-          {/if}
-
-          <!-- svelte-ignore a11y_consider_explicit_label -->
-          <CusButton
-            onclick={() => {
-              sideView = sideView === 'digest' ? 'list' : 'digest'
-              tick().then(() => scrollToTop(asideScrollbar))
-            }}
-            class="size-8 hidden!"
-          >
-            <div class="grid place-items-center">
-              {#if sideView === 'digest'}
-                <div
-                  class="col-start-1 row-start-1"
-                  in:slideScaleFade={{
-                    duration: 250,
-                    startScale: 0.5,
-                    startOpacity: 0,
-                  }}
-                  out:slideScaleFade={{
-                    duration: 200,
-                    startScale: 0.5,
-                    startOpacity: 0,
-                  }}
-                >
-                  <!-- List icon -->
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    class="size-5"
-                  >
-                    <path
-                      fill-rule="evenodd"
-                      d="M6 4.75A.75.75 0 0 1 6.75 4h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 4.75ZM6 10a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 10Zm0 5.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75ZM1.99 4.75a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 15.25a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 10a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1V10Z"
-                      clip-rule="evenodd"
-                    />
-                  </svg>
-                </div>
-              {:else}
-                <div
-                  class="col-start-1 row-start-1"
-                  in:slideScaleFade={{
-                    duration: 250,
-                    startScale: 0.5,
-                    startOpacity: 0,
-                  }}
-                  out:slideScaleFade={{
-                    duration: 200,
-                    startScale: 0.5,
-                    startOpacity: 0,
-                  }}
-                >
-                  <!-- Sparkle/Digest icon -->
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                  >
-                    <path
-                      fill="currentColor"
-                      d="M7.53 1.282a.5.5 0 0 1 .94 0l.478 1.306a7.5 7.5 0 0 0 4.464 4.464l1.305.478a.5.5 0 0 1 0 .94l-1.305.478a7.5 7.5 0 0 0-4.464 4.464l-.478 1.305a.5.5 0 0 1-.94 0l-.478-1.305a7.5 7.5 0 0 0-4.464-4.464L1.282 8.47a.5.5 0 0 1 0-.94l1.306-.478a7.5 7.5 0 0 0 4.464-4.464Z"
-                    />
-                  </svg>
-                </div>
-              {/if}
-            </div>
-          </CusButton>
+          <EnqueueToast
+            show={showEnqueueToast}
+            count={lastEnqueued}
+            estimateLabel={aiEstimateLabel}
+            variant="desktop"
+          />
         </div>
       </nav>
       <div
@@ -908,9 +692,7 @@
         style="font-size: var(--font-size-base);"
       >
         <!-- Title -->
-        <h2
-          class="text-2xl mb-8 font-serif text-text-main text-center font-bold"
-        >
+        <h2 class="text-2xl mb-8 font-serif text-text-main text-center font-bold">
           {formattedDate}
         </h2>
         <!-- Active filter bar (desktop) -->
@@ -928,92 +710,24 @@
           </div>
         {/if}
         {#if loading}
-          <!-- Loading skeleton -->
-          <div class="skeleton-container flex flex-col gap-8 animate-pulse">
-            {#each Array(6) as _}
-              <div>
-                <div class="flex items-center gap-2 mb-2">
-                  <div
-                    class="h-3 w-20 rounded bg-zinc-200 dark:bg-zinc-800"
-                  ></div>
-                  <div
-                    class="h-3 w-10 rounded bg-zinc-200 dark:bg-zinc-800"
-                  ></div>
-                </div>
-                <div
-                  class="h-5 w-full rounded bg-zinc-200 dark:bg-zinc-800 mb-2"
-                ></div>
-                <div
-                  class="h-4 w-3/4 rounded bg-zinc-200 dark:bg-zinc-800 mb-1"
-                ></div>
-                <div
-                  class="h-4 w-1/2 rounded bg-zinc-200 dark:bg-zinc-800"
-                ></div>
-              </div>
-            {/each}
-          </div>
+          <ArticleListSkeleton />
         {:else if sideView === 'digest'}
-          {#if digest}
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div
-              class="prose prose-sm max-w-none text-text-main-2 prose-headings:text-text-main! prose-p:text-text-main-2! prose-li:text-text-main-2! prose-a:text-text-main-2! prose-strong:text-text-main! prose-headings:text-base prose-headings:mt-6 prose-headings:mb-2 prose-p:leading-relaxed"
-              onclick={handleDigestClick}
-            >
-              {@html parsedDigestHtml}
-            </div>
-          {:else}
-            <div
-              class="text-sm text-zinc-500 py-10 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl"
-            >
-              Chưa có bản tin tổng hợp cho ngày này.
-            </div>
-          {/if}
+          <DigestView
+            {digest}
+            parsedHtml={parsedDigestHtml}
+            onArticleClick={handleDigestClick}
+          />
         {:else}
           <div class="flex flex-col gap-8">
             {#each filteredArticles as article (article.id)}
-              {@const isSelected = selectedArticle?.id === article.id}
-              <!-- svelte-ignore a11y_click_events_have_key_events -->
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <div
-                class="cursor-pointer relative group after:w-0 after:-translate-x-6 after:bg-border article-item {isSelected
-                  ? 'after:absolute after:left-0 after:top-0 after:bottom-0 after:w-1.5! after:rounded-l-4xl'
-                  : ''}"
+              <ArticleListItem
+                {article}
+                sourceName={getSourceName(article.source_id)}
+                isSelected={selectedArticle?.id === article.id}
+                showIndicator
                 onclick={() => selectArticle(article)}
-              >
-                <div
-                  class="flex items-center text-[0.675em] text-text-secondary uppercase tracking-wider mb-2"
-                >
-                  <span class="truncate pr-4"
-                    >{getSourceName(article.source_id)}</span
-                  >
-                  <span class="whitespace-nowrap shrink-0">
-                    {new Date(
-                      article.published_at || article.fetched_at,
-                    ).toLocaleTimeString('vi-VN', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </span>
-                </div>
-                <h3
-                  class="font-serif text-[1.125em] leading-[1.4] mb-2 font-semibold text-text-main group-hover:underline underline-offset-4 transition-all line-clamp-4 wrap-break-word"
-                >
-                  {@html article.title}
-                </h3>
-                <p
-                  class="text-[1em] text-text-secondary leading-relaxed line-clamp-10 wrap-break-word"
-                >
-                  {article.description_vn ||
-                    article.description ||
-                    article.summary
-                      ?.replace(/<[^>]*>?/gm, '')
-                      .substring(0, 150) ||
-                    'Đang xử lý nội dung...'}
-                </p>
-              </div>
+              />
             {/each}
-
             {#if filteredArticles.length === 0}
               <div
                 class="text-sm text-zinc-500 py-10 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl"
@@ -1034,119 +748,17 @@
       style="background-color: var(--color-bg-2);"
     >
       {#if selectedArticle}
-        <div class="flex gap-1">
-          <CusButton
-            onclick={goToPrevArticle}
-            disabled={navIdx <= 0}
-            class="size-8"
-            ><ChevronLeft class="-translate-x-px" size={20} /></CusButton
-          >
-          <CusButton
-            onclick={goToNextArticle}
-            disabled={navIdx < 0 || navIdx >= navArticles.length - 1}
-            class="size-8"
-            ><ChevronRight class="translate-x-px" size={20} /></CusButton
-          >
-          <div class="ml-auto flex gap-1">
-            <CusButton
-              onclick={() => ($prefs.fontSize = cycleFontSize($prefs.fontSize))}
-              class="size-8"
-              title="Đổi cỡ chữ"
-            >
-              <CaseSensitive size={16} />
-            </CusButton>
-            <CusButton
-              onclick={() => ($prefs.darkMode = !$prefs.darkMode)}
-              class="size-8"
-            >
-              <div class="grid place-items-center">
-                {#if $prefs.darkMode}
-                  <div
-                    class="col-start-1 row-start-1"
-                    in:slideScaleFade={{
-                      duration: 250,
-                      startScale: 0.5,
-                      startOpacity: 0,
-                    }}
-                    out:slideScaleFade={{
-                      duration: 200,
-                      startScale: 0.5,
-                      startOpacity: 0,
-                    }}
-                  >
-                    <Sun size={16} />
-                  </div>
-                {:else}
-                  <div
-                    class="col-start-1 row-start-1"
-                    in:slideScaleFade={{
-                      duration: 250,
-                      startScale: 0.5,
-                      startOpacity: 0,
-                    }}
-                    out:slideScaleFade={{
-                      duration: 200,
-                      startScale: 0.5,
-                      startOpacity: 0,
-                    }}
-                  >
-                    <Moon size={16} />
-                  </div>
-                {/if}
-              </div>
-            </CusButton>
-          </div>
-        </div>
-        <div
-          class="flex flex-col pb-4 pt-8 gap-4"
-          style="font-size: var(--font-size-base);"
-        >
-          <div
-            class="flex justify-center gap-4 items-center text-[0.75em] text-text-secondary"
-          >
-            <p class="flex items-center gap-1.5">
-              <Clock size={14} />
-              {new Date(
-                selectedArticle.published_at || selectedArticle.fetched_at,
-              ).toLocaleTimeString('vi-VN', {
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </p>
-            <a
-              href={selectedArticle.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              class="flex items-center gap-1.5 rounded-full hover:underline px-1 underline-offset-4"
-            >
-              <Link2 size={14} />
-              {new URL(selectedArticle.url).hostname.replace('www.', '')}
-            </a>
-          </div>
-
-          <h1
-            class="font-serif text-[1.25em] text-center text-balance md:text-[1.5em] font-bold leading-[1.2] text-text-main inline"
-          >
-            <a
-              href={selectedArticle.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              class="hover:underline underline-offset-4"
-            >
-              {@html selectedArticle.title}
-            </a>
-          </h1>
-        </div>
-
-        <div
-          class="prose text-text-main-2 prose-headings:text-text-main! prose-p:text-text-main-2! prose-li:text-text-main-2! prose-a:text-text-main-2! prose-strong:text-text-main-2! prose-blockquote:text-text-main-2! prose-code:text-text-main-2! dark:prose-invert max-w-none prose-base prose-headings:mt-8 prose-h2:text-xl prose-h3:text-lg prose-h4:text-lg prose-headings:mb-4 prose-p:leading-relaxed prose-li:leading-relaxed"
-        >
-          {#if selectedArticle.summary}
-            {@html marked.parse(selectedArticle.summary)}
-          {:else}
-            <p class="text-zinc-500 italic">Nội dung đang được xử lý...</p>
-          {/if}
-        </div>
+        <ArticleDetail
+          article={selectedArticle}
+          {navIdx}
+          navTotal={navArticles.length}
+          darkMode={$prefs.darkMode}
+          onPrev={goToPrevArticle}
+          onNext={goToNextArticle}
+          onToggleTheme={() => ($prefs.darkMode = !$prefs.darkMode)}
+          onCycleFontSize={() =>
+            ($prefs.fontSize = cycleFontSize($prefs.fontSize))}
+        />
       {:else}
         <div class="h-full flex items-center justify-center">
           <WelcomePanel />
