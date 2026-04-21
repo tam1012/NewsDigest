@@ -1149,11 +1149,7 @@
         </div>
       {:else}
         <div class="h-full flex items-center justify-center">
-          {#if loading}
-            <Loader2 size={24} class="animate-spin text-zinc-500" />
-          {:else}
-            <WelcomePanel />
-          {/if}
+          <WelcomePanel />
         </div>
       {/if}
     </OverlayScrollbarsComponent>
