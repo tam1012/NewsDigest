@@ -363,7 +363,11 @@
         untrack(() => {
           lastScrollInfo = { articleId: article.id }
         })
-        tick().then(() => scrollToTop(mainScrollbar))
+        tick().then(() => {
+          // The main content panel has no height constraint, so the body
+          // is the actual scroll container on desktop — scroll it to top.
+          window.scrollTo({ top: 0, behavior: 'instant' })
+        })
       }
     }
   })
@@ -391,7 +395,7 @@
           // Reset scroll for both panels when date changes (desktop only)
           if (!mobileMode) {
             tick().then(() => {
-              scrollToTop(mainScrollbar)
+              window.scrollTo({ top: 0, behavior: 'instant' })
               scrollToTop(asideScrollbar)
             })
           }
