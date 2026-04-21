@@ -28,6 +28,7 @@
   import SourceFilter from '$lib/components/app/SourceFilter.svelte'
   import MobileArticleSheet from '$lib/components/app/MobileArticleSheet.svelte'
   import PullToRefresh from '$lib/components/app/PullToRefresh.svelte'
+  import WelcomePanel from '$lib/components/app/WelcomePanel.svelte'
   import { getStoredAdminKey } from '$lib/admin'
 
   let { data } = $props()
@@ -373,6 +374,8 @@
   })
 
   let currentDatasetId = $state('')
+  // First visit: show welcome panel instead of auto-selecting the first article (desktop only)
+  let isFirstVisit = $state(true)
 
   $effect(() => {
     // Track only loading and currentDate — avoid tracking filteredArticles directly
@@ -383,13 +386,13 @@
       untrack(() => {
         if (date !== currentDatasetId) {
           currentDatasetId = date
-          if (innerWidth >= 768) {
+          if (innerWidth >= 768 && !isFirstVisit) {
             if (filteredArticles.length > 0) {
               selectedArticle = filteredArticles[0]
             } else {
               selectedArticle = null
             }
-          } else {
+          } else if (innerWidth < 768) {
             selectedArticle = null
           }
           // Reset scroll for both panels when date changes (desktop only)
@@ -406,6 +409,7 @@
 
   function selectArticle(a: Article) {
     selectedArticle = a
+    isFirstVisit = false
     if (mobileMode) drawerOpen = true
   }
 
@@ -1144,11 +1148,11 @@
           {/if}
         </div>
       {:else}
-        <div class="h-full flex items-center justify-center text-zinc-500">
+        <div class="h-full flex items-center justify-center">
           {#if loading}
-            <Loader2 size={24} class="animate-spin" />
+            <Loader2 size={24} class="animate-spin text-zinc-500" />
           {:else}
-            <p>Chọn một bài viết để đọc</p>
+            <WelcomePanel />
           {/if}
         </div>
       {/if}
