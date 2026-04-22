@@ -107,6 +107,7 @@
     <CusButton
       onclick={onScrollToTop}
       title="Lên đầu trang"
+      aria-label="Lên đầu trang"
       class="size-12 md:size-10"
     >
       <ChevronUp size={20} />

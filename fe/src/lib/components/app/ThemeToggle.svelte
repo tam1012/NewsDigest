@@ -14,8 +14,7 @@
   } = $props()
 </script>
 
-<!-- svelte-ignore a11y_consider_explicit_label -->
-<CusButton onclick={onToggle} class={className}>
+<CusButton onclick={onToggle} class={className} aria-label={darkMode ? 'Chuyển sang chế độ sáng' : 'Chuyển sang chế độ tối'}>
   <div class="grid place-items-center">
     {#if darkMode}
       <div

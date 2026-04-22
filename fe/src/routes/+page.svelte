@@ -9,7 +9,6 @@
   import { sources } from '$lib/stores/sources'
   import { api } from '$lib/api'
   import { marked } from 'marked'
-  import { OverlayScrollbarsComponent } from 'overlayscrollbars-svelte'
   import CusButton from '$lib/components/ui/CusButton.svelte'
   import CusButtonTab from '$lib/components/ui/CusButtonTab.svelte'
   import { articleCache } from '$lib/stores/articleCache.svelte'
@@ -326,11 +325,8 @@
   let lastScrollInfo = $state({ articleId: null as string | null })
 
   // ── Scroll container refs (desktop) ──────────────────────────
-  // asideEl  = left panel native scroll div (article list / digest)
-  // mainScrollbar = right panel (OverlayScrollbars, unchanged)
+  // asideEl = left panel native scroll div (article list / digest)
   let asideEl = $state<HTMLElement | null>(null)
-  let mainScrollbar: ReturnType<typeof OverlayScrollbarsComponent> | undefined =
-    $state()
 
   /** Scroll the aside panel to the top instantly. */
   function scrollToTop(el: HTMLElement | null | undefined) {
@@ -514,10 +510,10 @@
         class="size-12"
       />
       <div class="flex gap-2">
-        <!-- svelte-ignore a11y_consider_explicit_label -->
         <CusButton
           onclick={() => ($prefs.fontSize = cycleFontSize($prefs.fontSize))}
           class="size-12"
+          aria-label="Đổi cỡ chữ"
           title="Đổi cỡ chữ"
         >
           <CaseSensitive size={18} />
@@ -542,11 +538,11 @@
       class="fixed z-40 flex gap-2 justify-between bottom-0 px-8 pb-8 pt-4 w-full bg-linear-to-t from-bg-1 to-bg-1/0"
     >
       {#if isAdmin && unsummarizedCount > 0 && !aiButtonHidden}
-        <!-- svelte-ignore a11y_consider_explicit_label -->
         <CusButton
           onclick={handleResummarize}
           disabled={resummarizing}
           class="size-12 px-2 text-xs gap-1"
+          aria-label="Chạy AI tóm tắt ({unsummarizedCount} bài)"
         >
           {#if resummarizing}
             <Loader2 size={14} class="animate-spin" />
@@ -669,11 +665,11 @@
           />
           <SourceFilter {articles} size="sm" />
           {#if isAdmin && unsummarizedCount > 0 && !aiButtonHidden}
-            <!-- svelte-ignore a11y_consider_explicit_label -->
             <CusButton
               onclick={handleResummarize}
               disabled={resummarizing}
               class="h-8 px-2 text-xs gap-1"
+              aria-label="Chạy AI tóm tắt ({unsummarizedCount} bài)"
             >
               {#if resummarizing}
                 <Loader2 size={14} class="animate-spin" />
@@ -759,12 +755,8 @@
         {/if}
       </div>
     </aside>
-    <OverlayScrollbarsComponent
-      bind:this={mainScrollbar}
-      element="main"
-      defer
-      options={{ scrollbars: { autoHide: 'leave', autoHideDelay: 300 } }}
-      class="flex-1 py-6 md:px-10 xl:px-16"
+    <main
+      class="flex-1 py-6 md:px-10 xl:px-16 overflow-y-scroll main-scroll"
       style="background-color: var(--color-bg-2);"
     >
       {#if selectedArticle}
@@ -784,6 +776,6 @@
           <WelcomePanel />
         </div>
       {/if}
-    </OverlayScrollbarsComponent>
+    </main>
   </div>
 </div>

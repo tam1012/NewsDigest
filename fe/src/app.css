@@ -183,20 +183,14 @@ a:focus-visible {
 } 
 
 
-/* OverlayScrollbars handle colors */
-.os-scrollbar-handle {
-  background: hsl(50 5% 75%) !important;
+/* ═══════════════ MAIN PANEL NATIVE SCROLLBAR ═══════════════ */
+/* overflow-y: scroll keeps scrollbar always visible to prevent layout shift */
+.main-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(50 5% 82%) transparent;
 }
-.os-scrollbar-handle:hover,
-.os-scrollbar-handle:active {
-  background: hsl(50 5% 65%) !important;
-}
-.dark .os-scrollbar-handle {
-  background: hsl(50 3% 30%) !important;
-}
-.dark .os-scrollbar-handle:hover,
-.dark .os-scrollbar-handle:active {
-  background: hsl(50 3% 40%) !important;
+.dark .main-scroll {
+  scrollbar-color: hsl(50 3% 28%) transparent;
 }
 
 /* ═══════════════ ASIDE NATIVE SCROLLBAR ═══════════════ */

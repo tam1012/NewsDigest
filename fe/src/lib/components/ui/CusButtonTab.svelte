@@ -59,7 +59,7 @@
   <!-- Sliding indicator -->
   <span
     bind:this={indicatorEl}
-    class="absolute inset-y-0.75 rounded-full border border-white bg-bg-btn dark:border-white/5 dark:bg-bg-btn dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)] transition-[width,transform,opacity] duration-400 ease-out"
+    class="absolute inset-y-0.75 rounded-full border border-white bg-bg-btn dark:border-white/5 dark:bg-bg-btn dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)] transition-[transform,opacity] duration-400 ease-out"
     class:opacity-0={!visible}
     style="width: {indicatorW}px; transform: translateX({indicatorX}px);"
   ></span>
