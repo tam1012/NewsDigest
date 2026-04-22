@@ -1,6 +1,7 @@
 import { Env } from '../types';
 import { ProhibitedContentError } from '../errors';
 import { buildPromptConfig, PromptConfig } from './prompt-config';
+import { buildGeminiRequest } from './client';
 import {
   buildSystemPrompt,
   buildDigestPrompt,
@@ -100,7 +101,7 @@ async function callGemini(
   attempt = 1,
   timeoutMs?: number,
 ): Promise<string> {
-  const url = `${env.AI_GATEWAY_URL}/v1beta/models/${model}:generateContent`;
+  const { url, headers } = buildGeminiRequest(env, model);
 
   const body = {
     systemInstruction: { parts: [{ text: systemPrompt }] },
@@ -115,11 +116,7 @@ async function callGemini(
   const timeout = timeoutMs ?? 60000;
   const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'cf-aig-authorization': `Bearer ${env.AI_GATEWAY_TOKEN}`,
-      'cf-aig-byok-alias': 'default',
-    },
+    headers,
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(timeout),
   });
@@ -162,7 +159,7 @@ async function callGeminiPlainText(
   timeoutMs = 60000,
   attempt = 1,
 ): Promise<string> {
-  const url = `${env.AI_GATEWAY_URL}/v1beta/models/${model}:generateContent`;
+  const { url, headers } = buildGeminiRequest(env, model);
 
   const body = {
     systemInstruction: { parts: [{ text: systemPrompt }] },
@@ -175,11 +172,7 @@ async function callGeminiPlainText(
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'cf-aig-authorization': `Bearer ${env.AI_GATEWAY_TOKEN}`,
-      'cf-aig-byok-alias': 'default',
-    },
+    headers,
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(timeoutMs),
   });
@@ -388,7 +381,8 @@ export async function summarizeArticle(
 
 /**
  * Tổng hợp digest từ danh sách bài đã summarized.
- * AI sẽ inline reference bằng <id:uuid> trong digest_text.
+ * AI nhận short ID (8 chars) để giảm token noise → sau khi generate xong,
+ * expand lại thành full UUID trước khi trả về.
  * Flow: JSON mode (retry) → plain text (last resort).
  */
 export async function generateDigest(
@@ -400,17 +394,46 @@ export async function generateDigest(
   const config = buildPromptConfig(env);
   const digestPrompt = buildDigestPrompt(config);
 
+  // ── Build short ID ↔ full UUID mapping ──
+  // UUID first 8 chars (before first hyphen) — collision-free for ~50 articles
+  const shortToFull = new Map<string, string>();
+  for (const a of articles) {
+    const shortId = a.id.slice(0, 8);
+    shortToFull.set(shortId, a.id);
+  }
+
   const formatted = articles
-    .map((a) => `ID: ${a.id}\nTitle: ${a.title}\nSummary: ${a.summary}\nScore: ${a.hot_score}`)
+    .map((a) => `ID: ${a.id.slice(0, 8)}\nTitle: ${a.title}\nSummary: ${a.summary}\nScore: ${a.hot_score}`)
     .join('\n---\n');
   const userPrompt = `Analyze and synthesize ${articles.length} articles from today:\n\n${formatted}`;
 
   const DIGEST_TIMEOUT = 120000; // 120s — digest prompt is large (40+ articles)
 
+  /** Expand short IDs back to full UUIDs + strip any hallucinated IDs */
+  function expandIds(text: string): string {
+    return text.replace(/<id:([a-f0-9-]+)>/gi, (_match, fragment: string) => {
+      // Exact short ID match (expected case)
+      const fullId = shortToFull.get(fragment);
+      if (fullId) return `<id:${fullId}>`;
+      // Prefix match fallback (LLM sometimes adds extra chars)
+      for (const [short, full] of shortToFull) {
+        if (fragment.startsWith(short) || short.startsWith(fragment)) {
+          return `<id:${full}>`;
+        }
+      }
+      // No match → strip hallucinated ID
+      console.log(`⚠️ Digest: stripping unknown ID fragment "${fragment}"`);
+      return '';
+    });
+  }
+
   // ── Try JSON mode (with retry) ──
   try {
     const result = await callGeminiWithJsonRetry<DigestResult>(env, digestPrompt, userPrompt, DIGEST_TIMEOUT);
-    if (result.digest_text) return result;
+    if (result.digest_text) {
+      result.digest_text = expandIds(result.digest_text);
+      return result;
+    }
     console.log('⚠️ Invalid digest structure');
   } catch (err: any) {
     console.log(`⚠️ JSON mode digest failed: ${err.message}`);
@@ -437,6 +460,7 @@ export async function generateDigest(
     }
 
     if (digestText && digestText.length > 50) {
+      digestText = expandIds(digestText);
       console.log(`✅ Plain text digest succeeded (${digestText.length} chars)`);
       return { digest_text: digestText };
     }

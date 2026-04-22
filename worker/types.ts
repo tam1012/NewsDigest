@@ -4,8 +4,12 @@ export interface Env {
   CONTENT_QUEUE: Queue;
   RAPIDAPI_KEY: string;
   YOUTUBE_API_KEY?: string;
-  AI_GATEWAY_TOKEN: string;
-  AI_GATEWAY_URL: string;
+  /** Direct Gemini API key — simpler setup, no Cloudflare AI Gateway needed. Get at: https://aistudio.google.com/apikey */
+  GEMINI_API_KEY?: string;
+  /** Cloudflare AI Gateway auth token — required when GEMINI_API_KEY is not set. */
+  AI_GATEWAY_TOKEN?: string;
+  /** Cloudflare AI Gateway URL — required when GEMINI_API_KEY is not set. */
+  AI_GATEWAY_URL?: string;
   ADMIN_API_KEY?: string;
 
   // ── Prompt configuration (all optional — see worker/ai/prompt-config.ts) ──

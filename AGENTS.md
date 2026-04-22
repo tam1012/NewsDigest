@@ -10,7 +10,7 @@ NewsDigest is a personal PWA news aggregator running entirely on the Cloudflare 
 
 - **Worker** (`/worker`) — Cloudflare Worker built with Hono + TypeScript: cron scraper, queue consumer, REST API
 - **Frontend** (`/fe`) — SvelteKit + Tailwind CSS v4 + shadcn-svelte, deployed to Cloudflare Pages
-- **AI** — Gemini (via Cloudflare AI Gateway) for article summarization + daily digest generation
+- **AI** — Gemini (direct API or via Cloudflare AI Gateway) for article summarization + daily digest generation
 
 Main flow: Cron → scrape sources → insert articles into D1 → enqueue to Queue → queue consumer fetches content + calls AI → FE reads via REST API.
 
@@ -69,6 +69,7 @@ Main flow: Cron → scrape sources → insert articles into D1 → enqueue to Qu
 │   │       ├── content.ts      # loadStoredProfile, saveProfile, normalizeProfile, shouldAcceptCandidate
 │   │       └── listing.ts      # loadStoredListingProfile, extractListingWithSelectorSet, buildListingArticles
 │   └── ai/
+│       ├── client.ts           # buildGeminiRequest(env, model) — auto-detects Direct vs Gateway mode
 │       ├── summarizer.ts       # summarizeArticle() + generateDigest() + Gemini call logic + fallback
 │       ├── scraper-profile.ts  # generateScraperProfile() + generateListingProfile() + callGemini()
 │       └── prompt-config.ts    # buildPromptConfig(env) — reads PROMPT_* env vars with defaults
@@ -88,7 +89,8 @@ Main flow: Cron → scrape sources → insert articles into D1 → enqueue to Qu
 │   ├── deploy-fe.mjs           # Frontend-only deploy
 │   └── fix-known-sources.mjs   # Seed/fix known sources
 ├── schema.sql                  # D1 schema (sources, articles, digests, scraper_configs)
-└── .env.example                # Environment variable template
+├── .env.example.gemini         # Env template — Option A: Direct Gemini API key (simpler)
+└── .env.example.gateway        # Env template — Option B: Cloudflare AI Gateway (advanced)
 ```
 
 ---
@@ -164,11 +166,13 @@ UPDATE articles SET summary=?, hot_score=?, tags=?, content=NULL
 
 ## AI / Gemini Integration
 
-Files: `worker/ai/summarizer.ts`, `worker/ai/scraper-profile.ts`, `worker/ai/prompt-config.ts`
+Files: `worker/ai/client.ts`, `worker/ai/summarizer.ts`, `worker/ai/scraper-profile.ts`, `worker/ai/prompt-config.ts`
 
 - Model pool: `gemma-4-31b-it` and `gemma-4-26b-a4b-it` — random pick + automatic failover on 429
-- Called via Cloudflare AI Gateway (BYOK with Google AI Studio key)
-- Auth headers: `cf-aig-authorization: Bearer <token>` + `cf-aig-byok-alias: default`
+- **Dual backend** — `buildGeminiRequest(env, model)` in `worker/ai/client.ts` auto-detects mode:
+  - **Mode A (Direct):** `GEMINI_API_KEY` set → calls `https://generativelanguage.googleapis.com/v1beta/...?key=...` directly
+  - **Mode B (Gateway):** `AI_GATEWAY_URL` + `AI_GATEWAY_TOKEN` set → routes through Cloudflare AI Gateway
+  - `GEMINI_API_KEY` takes priority if both are set; throws a clear error if neither is configured
 - JSON mode (`responseMimeType: 'application/json'`) — `extractJson()` handles repair/fallback parsing
 - `ProhibitedContentError` = blocked by safety filters, do NOT retry, marks `summary='[blocked]'`
 - Prompts are configurable via `PROMPT_*` env vars — see `worker/ai/prompt-config.ts` and Environment Variables section
@@ -216,12 +220,20 @@ Admin auth: `X-Admin-Key: <ADMIN_API_KEY>` header. Auth is skipped if `ADMIN_API
 
 ## Environment Variables
 
-See `.env.example` for the full list. Key variables:
+See `.env.example.gemini` (Option A) or `.env.example.gateway` (Option B) for the full list. Key variables:
+
+**AI Backend — set ONE of the following two options:**
 
 | Variable | Required | Description |
 |---|---|---|
-| `AI_GATEWAY_URL` | ✅ | `https://gateway.ai.cloudflare.com/v1/<account>/<gateway>/google-ai-studio` |
-| `AI_GATEWAY_TOKEN` | ✅ | Auth token from Cloudflare AI Gateway |
+| `GEMINI_API_KEY` | ✅ Option A | Direct Gemini API key — get free at [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| `AI_GATEWAY_URL` | ✅ Option B | `https://gateway.ai.cloudflare.com/v1/<account>/<gateway>/google-ai-studio` |
+| `AI_GATEWAY_TOKEN` | ✅ Option B | Auth token from Cloudflare AI Gateway |
+
+**Other variables:**
+
+| Variable | Required | Description |
+|---|---|---|
 | `RAPIDAPI_KEY` | ✅ | YouTube transcript fetching via yt-api.p.rapidapi.com |
 | `YOUTUBE_API_KEY` | ☑️ | Fallback when YouTube RSS feeds are unavailable |
 | `ADMIN_API_KEY` | ☑️ | Protects write endpoints |
@@ -243,7 +255,9 @@ All `PROMPT_*` vars are optional — defaults reproduce the current Vietnamese/t
 npm install && cd fe && npm install && cd ..
 
 # Copy env files
-cp .env.example .env              # fill in AI_GATEWAY_URL, AI_GATEWAY_TOKEN, RAPIDAPI_KEY
+# Copy env files (choose one)
+cp .env.example.gemini .env     # Option A: Direct Gemini API key (simpler)
+# cp .env.example.gateway .env  # Option B: Cloudflare AI Gateway
 cp fe/.env.example fe/.env.local  # set VITE_API_URL=http://localhost:8787
 
 # Terminal 1: Worker (localhost:8787)

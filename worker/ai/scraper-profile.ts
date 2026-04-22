@@ -1,4 +1,5 @@
 import { Env, ListingProfileConfig, ScraperProfileConfig } from '../types';
+import { buildGeminiRequest } from './client';
 
 // Hai model Gemma 4 cùng rate limit → gấp đôi throughput
 const MODELS = ['gemma-4-31b-it', 'gemma-4-26b-a4b-it'] as const;
@@ -81,17 +82,13 @@ export async function callGemini(
   model = pickModel(),
   attempt = 1
 ): Promise<string> {
-  const url = `${env.AI_GATEWAY_URL}/v1beta/models/${model}:generateContent`;
+  const { url, headers } = buildGeminiRequest(env, model);
 
   let res: Response;
   try {
     res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'cf-aig-authorization': `Bearer ${env.AI_GATEWAY_TOKEN}`,
-        'cf-aig-byok-alias': 'default',
-      },
+      headers,
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: systemPrompt }] },
         contents: [{ role: 'user', parts: [{ text: prompt }] }],

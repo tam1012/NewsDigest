@@ -2,7 +2,7 @@
 .env
 .env.*
 !.env.example
-.dev.vars
+!.env.example.gateway
 
 # Dependency directories
 node_modules/

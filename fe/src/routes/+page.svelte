@@ -240,8 +240,8 @@
   let digestArticles = $derived.by(() => {
     const map = new Map(articles.map((a) => [a.id, a]))
     return digestArticleIds
-      .filter((id) => map.has(id))
-      .map((id) => map.get(id)!)
+      .map((id) => map.get(id) ?? articles.find((a) => a.id.startsWith(id)))
+      .filter((a): a is Article => !!a)
   })
 
   let sideView = $state<'list' | 'digest'>('list')
@@ -480,7 +480,10 @@
     if (!target) return
     const articleId = target.dataset.articleId
     if (!articleId) return
-    const article = articles.find((a) => a.id === articleId)
+    // Exact match first, then prefix fallback (safety net for short IDs)
+    const article =
+      articles.find((a) => a.id === articleId) ??
+      articles.find((a) => a.id.startsWith(articleId))
     if (article) selectArticle(article)
   }
 

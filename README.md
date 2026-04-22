@@ -1,13 +1,13 @@
 # NewsDigest
 
-AI-powered daily tech news aggregator. Automatically fetches articles from RSS, Reddit, YouTube, Hacker News, GitHub Trending, and more — then summarizes and scores them using Gemini AI via Cloudflare AI Gateway.
+AI-powered daily tech news aggregator. Automatically fetches articles from RSS, Reddit, YouTube, Hacker News, GitHub Trending, and more — then summarizes and scores them using Gemini AI.
 
 ## Architecture
 
 - **Worker** (Cloudflare Workers) — cron scraper, queue consumer, AI summarizer, REST API
 - **Frontend** (SvelteKit on Cloudflare Pages) — PWA reader
 
-**Stack:** Hono · TypeScript · Cloudflare D1 · Cloudflare Queue · Cloudflare KV · Gemini (via AI Gateway)
+**Stack:** Hono · TypeScript · Cloudflare D1 · Cloudflare Queue · Cloudflare KV · Gemini AI
 
 ## Quick Deploy
 
@@ -29,32 +29,50 @@ cd fe && npm install && cd ..
 npx wrangler login
 ```
 
-### 3. Get API keys (one-time manual setup)
+### 3. Choose your AI backend & get API keys
 
-Before configuring `.env`, you need to obtain API keys from several services. Follow each guide below:
+NewsDigest supports two AI backend modes. **Choose one:**
 
-#### Cloudflare AI Gateway
+---
 
-AI Gateway routes your Gemini API calls through Cloudflare, providing caching, rate limiting, and analytics.
+#### Option A — Direct Gemini API *(simpler, recommended for self-hosting)*
+
+Just get a free Gemini API key — no Cloudflare AI Gateway setup needed.
+
+1. Go to [Google AI Studio](https://aistudio.google.com/apikey) → **Create API key**
+2. Copy the key → it goes into `GEMINI_API_KEY` in your `.env`
+
+```bash
+cp .env.example.gemini .env
+```
+
+---
+
+#### Option B — Cloudflare AI Gateway *(advanced: caching, logging, rate-limit dashboard)*
+
+Routes Gemini calls through Cloudflare for observability and caching.
 
 1. Go to [Cloudflare Dashboard](https://dash.cloudflare.com) → **AI** → **AI Gateway**
 2. Click **Create Gateway** → name it (e.g. `newsdigest`) → Create
 3. Inside the gateway, click **Providers** → **Add Provider**
-4. Select **Google AI Studio** as provider
-5. Go to [Google AI Studio](https://aistudio.google.com/apikey) → create an API key → paste it as the Provider Key
-6. Give the key an alias (e.g. `default`)
-7. From the gateway page, copy:
-   - **Gateway URL** → looks like `https://gateway.ai.cloudflare.com/v1/<account_id>/<gateway_name>/google-ai-studio`
-   - **Auth token** → from gateway settings
+4. Select **Google AI Studio** → go to [Google AI Studio](https://aistudio.google.com/apikey), create an API key, paste it as the Provider Key. Set alias to `default`
+5. From the gateway page, copy:
+   - **Gateway URL** → `https://gateway.ai.cloudflare.com/v1/<account_id>/<gateway_name>/google-ai-studio`
+   - **Auth token** → from gateway Settings
 
-#### RapidAPI (YouTube Transcripts)
+```bash
+cp .env.example.gateway .env
+```
+
+---
+
+#### RapidAPI — YouTube Transcripts (required for both options)
 
 Used to fetch video transcripts so the AI can summarize YouTube content.
 
 1. Go to [yt-api on RapidAPI](https://rapidapi.com/ytjar/api/yt-api)
-2. Sign up / log in to RapidAPI
-3. Click **Subscribe** → choose the free tier (Basic)
-4. Copy your **X-RapidAPI-Key** from the code examples on the right panel
+2. Sign up / log in → **Subscribe** → choose the free tier (Basic)
+3. Copy your **X-RapidAPI-Key** from the code examples on the right panel
 
 #### Admin API Key (optional)
 
@@ -66,11 +84,7 @@ openssl rand -hex 32
 
 ### 4. Configure environment
 
-```bash
-cp .env.example .env
-```
-
-Fill in the keys you obtained above. See comments in `.env.example` for which field goes where.
+Fill in the keys you obtained above. See comments in the `.env` file for details.
 
 ### 5. Initialize Cloudflare resources
 
@@ -92,13 +106,16 @@ This deploys the Worker, builds the frontend with the correct API URL, and deplo
 
 ## API Keys Reference
 
-| Key | Source | Purpose |
-|---|---|---|
-| `AI_GATEWAY_URL` | [Cloudflare AI Gateway](https://dash.cloudflare.com) → AI → AI Gateway | Gateway URL for Gemini AI calls |
-| `AI_GATEWAY_TOKEN` | Same as above → gateway settings | Authorization token |
-| `RAPIDAPI_KEY` | [RapidAPI — yt-api](https://rapidapi.com/ytjar/api/yt-api) | Fetches YouTube subtitles/transcripts |
-| `YOUTUBE_API_KEY` | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) | Optional fallback when YouTube RSS feeds are down |
-| `ADMIN_API_KEY` | Self-generated (`openssl rand -hex 32`) | Protects write endpoints (optional) |
+| Key | Source | Required | Purpose |
+|---|---|---|---|
+| `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/apikey) | ✅ Option A | Direct Gemini API calls |
+| `AI_GATEWAY_URL` | [Cloudflare AI Gateway](https://dash.cloudflare.com) → AI → AI Gateway | ✅ Option B | Gateway URL for Gemini AI calls |
+| `AI_GATEWAY_TOKEN` | Same gateway → Settings | ✅ Option B | Authorization token |
+| `RAPIDAPI_KEY` | [RapidAPI — yt-api](https://rapidapi.com/ytjar/api/yt-api) | ✅ Both | Fetches YouTube subtitles/transcripts |
+| `YOUTUBE_API_KEY` | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) | ☑️ Both | Optional fallback when YouTube RSS feeds are down |
+| `ADMIN_API_KEY` | Self-generated (`openssl rand -hex 32`) | ☑️ Both | Protects write endpoints (optional) |
+
+> **Note:** Set either `GEMINI_API_KEY` **or** `AI_GATEWAY_URL` + `AI_GATEWAY_TOKEN` — not both. If `GEMINI_API_KEY` is present, it takes priority.
 
 ---
 

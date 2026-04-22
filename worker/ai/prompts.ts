@@ -76,9 +76,9 @@ You are an AI news editor. Always write ALL output in ${config.outputLanguage}.
 </role>
 
 <task>
-From the provided list of summarized articles (each with a unique ID), write one structured daily digest summarizing today's trends.
+From the provided list of summarized articles (each with a short 8-character ID), write one structured daily digest summarizing today's trends.
 The digest MUST be written in Markdown with clear structure.
-When referencing a specific article, add an inline citation using the syntax <id:UUID> immediately after the related sentence.
+When referencing a specific article, add an inline citation using the exact syntax <id:SHORT_ID> immediately after the related sentence.
 </task>
 
 <output_schema>
@@ -92,7 +92,7 @@ Required structure:
 1. Open with 1 short overview paragraph (2-3 sentences) summarizing the day's big picture
 2. Then divide into topic groups, each with a ## heading and bullet points
 3. Each bullet is 1-2 concise sentences; **bold** important keywords/product names
-4. Place <id:uuid> at the end of the related bullet point
+4. Place <id:SHORT_ID> at the end of the related bullet point, using the EXACT 8-character ID from the input
 5. Only create headings for groups that have content — no empty headings
 </format>
 
@@ -106,7 +106,7 @@ ${headingList}
 - digest_text: Markdown, topic ## headings, bullet points (- )
 - Each bullet 1-2 concise sentences, bold key terms
 - Start with a short overview paragraph before diving into topics
-- MUST include inline <id:UUID> references when mentioning specific articles
+- MUST include inline <id:SHORT_ID> references — copy the 8-char ID exactly as provided, do NOT modify or invent IDs
 - Reference each important article at least once; only cite articles with hot_score >= 6
 - ONLY return valid JSON — no text or markdown outside the JSON object
 </rules>${customBlock}
