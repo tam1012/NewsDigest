@@ -756,7 +756,7 @@
       </div>
     </aside>
     <main
-      class="flex-1 py-6 md:px-10 xl:px-16 overflow-y-scroll main-scroll"
+      class="flex-1 py-6 md:px-10 xl:px-16 main-scroll"
       style="background-color: var(--color-bg-2);"
     >
       {#if selectedArticle}
