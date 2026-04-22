@@ -25,6 +25,7 @@
   import ArticleListItem from '$lib/components/app/ArticleListItem.svelte'
   import ArticleDetail from '$lib/components/app/ArticleDetail.svelte'
   import EnqueueToast from '$lib/components/app/EnqueueToast.svelte'
+  import ScrollToTopButton from '$lib/components/app/ScrollToTopButton.svelte'
 
   let { data } = $props()
 
@@ -324,23 +325,16 @@
   // State to track scroll preservation
   let lastScrollInfo = $state({ articleId: null as string | null })
 
-  // ── OverlayScrollbars refs (desktop) ──────────────────────────
-  // asideScrollbar = left panel (article list / digest)
-  // mainScrollbar  = right panel (article content)
-  let asideScrollbar:
-    | ReturnType<typeof OverlayScrollbarsComponent>
-    | undefined = $state()
+  // ── Scroll container refs (desktop) ──────────────────────────
+  // asideEl  = left panel native scroll div (article list / digest)
+  // mainScrollbar = right panel (OverlayScrollbars, unchanged)
+  let asideEl = $state<HTMLElement | null>(null)
   let mainScrollbar: ReturnType<typeof OverlayScrollbarsComponent> | undefined =
     $state()
 
-  /** Scroll an OverlayScrollbarsComponent viewport to the top instantly. */
-  function scrollToTop(
-    ref: ReturnType<typeof OverlayScrollbarsComponent> | undefined,
-  ) {
-    ref
-      ?.osInstance()
-      ?.elements()
-      .viewport.scrollTo({ top: 0, behavior: 'instant' })
+  /** Scroll the aside panel to the top instantly. */
+  function scrollToTop(el: HTMLElement | null | undefined) {
+    el?.scrollTo({ top: 0, behavior: 'instant' })
   }
 
   // automatically select the first article when articles load on desktop
@@ -394,7 +388,7 @@
           if (!mobileMode) {
             tick().then(() => {
               window.scrollTo({ top: 0, behavior: 'instant' })
-              scrollToTop(asideScrollbar)
+              scrollToTop(asideEl)
             })
           }
         }
@@ -573,6 +567,12 @@
       <SourceFilter {articles} size="md" />
     </div>
 
+    <!-- Back to top (mobile) — hovers above bottom bar on right side -->
+    <ScrollToTopButton
+      onScrollToTop={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+      class="fixed bottom-24 right-8"
+    />
+
     <h2 class="text-2xl mb-8 font-serif text-text-main text-center font-bold">
       {formattedDate}
     </h2>
@@ -662,7 +662,7 @@
             value={sideView !== 'digest'}
             onchange={(v) => {
               sideView = v ? 'list' : 'digest'
-              tick().then(() => scrollToTop(asideScrollbar))
+              tick().then(() => scrollToTop(asideEl))
             }}
             tab1Label="News"
             tab2Label="Digest"
@@ -697,11 +697,16 @@
         style="background: linear-gradient(to bottom, var(--color-bg-1) 10%, transparent);"
       ></div>
       <!-- Aside Content: Digest or Article List -->
-      <OverlayScrollbarsComponent
-        bind:this={asideScrollbar}
-        defer
-        options={{ scrollbars: { autoHide: 'leave', autoHideDelay: 300 } }}
-        class="px-6 py-20"
+      <!-- Back to top (desktop aside panel) -->
+      <ScrollToTopButton
+        scrollTarget={asideEl}
+        onScrollToTop={() => scrollToTop(asideEl)}
+        class="absolute bottom-6 right-4"
+      />
+
+      <div
+        bind:this={asideEl}
+        class="aside-scroll px-6 py-20 flex-1 overflow-y-auto"
         style="font-size: var(--font-size-base);"
       >
         <!-- Title -->
@@ -752,7 +757,7 @@
             {/if}
           </div>
         {/if}
-      </OverlayScrollbarsComponent>
+      </div>
     </aside>
     <OverlayScrollbarsComponent
       bind:this={mainScrollbar}
