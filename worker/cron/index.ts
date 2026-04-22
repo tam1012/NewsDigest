@@ -2,6 +2,8 @@ import { Env, Source, ContentScrapeMessage } from '../types';
 import { ArticleRepo, SourceRepo } from '../db';
 import { fetchSource } from './scraper';
 import { stripHtmlToText } from '../scraper/utils';
+import { githubFetcher } from '../queue/fetchers/github';
+import { summarizeArticle } from '../ai/summarizer';
 
 /** Chuẩn hoá published_at về ISO 8601 UTC trước khi insert. */
 function normalizePublishedAt(raw?: string | null): string {
@@ -93,10 +95,15 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
           newArticles.push({ articleId: idValue, url: article.url, title: article.title });
         }
       } else if (source.type === 'github-trending') {
-        // ── GitHub Trending: re-enqueue nếu repo leo top lại sau ≥ 3 ngày ──
+        // ── GitHub Trending: xử lý INLINE (không dùng queue) ──────────────────
+        // Queue consumer bị giới hạn CPU 10ms/invocation trên Free plan → bị kill.
+        // Scheduled worker không có giới hạn này (wall clock 15 phút) → an toàn hơn.
         const existing = await ArticleRepo.findBySourceAndUrl(env.DB, source.id, article.url);
         const description = article.description || null;
         const publishedAt = normalizePublishedAt(article.published_at);
+
+        let articleId: string;
+        let needsSummarize = false;
 
         if (existing) {
           // Luôn update description (stars mới nhất)
@@ -106,19 +113,45 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
           const daysSince = (Date.now() - new Date(existing.published_at).getTime()) / 86_400_000;
           if (daysSince >= 3) {
             await ArticleRepo.resetForReprocessing(env.DB, existing.id, publishedAt);
-            newArticles.push({ articleId: existing.id, url: article.url, title: article.title });
+            articleId = existing.id;
+            needsSummarize = true;
             insertedCount++;
-            console.log(`🔄 GitHub Trending re-enqueue "${article.title}" — last seen ${daysSince.toFixed(1)} days ago`);
+            console.log(`🔄 GitHub Trending re-process "${article.title}" — last seen ${daysSince.toFixed(1)} days ago`);
+          } else {
+            // Bài còn mới, đã có summary → bỏ qua
+            continue;
           }
         } else {
-          // Repo mới hoàn toàn → insert + enqueue
-          const idValue = crypto.randomUUID();
+          // Repo mới hoàn toàn → insert
+          articleId = crypto.randomUUID();
           await ArticleRepo.insert(env.DB, {
-            id: idValue, source_id: source.id, url: article.url,
+            id: articleId, source_id: source.id, url: article.url,
             title: article.title, description, published_at: publishedAt,
           });
           insertedCount++;
-          newArticles.push({ articleId: idValue, url: article.url, title: article.title });
+          needsSummarize = true;
+        }
+
+        // ── Inline: fetch README + AI summarize (tuần tự, không enqueue) ──
+        if (needsSummarize) {
+          try {
+            const content = await githubFetcher.fetch(article.url, env);
+            if (content) {
+              console.log(`📖 GitHub README fetched for "${article.title}" (${content.length} chars)`);
+              const aiResult = await summarizeArticle(article.title, content, env);
+              if (aiResult) {
+                await ArticleRepo.updateSummary(env.DB, articleId, aiResult);
+                console.log(`🤖 GitHub Trending summarized: "${article.title}" → score=${aiResult.hot_score}`);
+              }
+            } else {
+              console.log(`⚠️ No README content for "${article.title}"`);
+            }
+          } catch (err: any) {
+            // ContentUnavailableError (no README) → không retry, ghi chú vào description_vn
+            const msg = err?.message || String(err);
+            console.log(`⚠️ GitHub Trending inline error for "${article.title}": ${msg}`);
+            // Không throw — tiếp tục xử lý repo tiếp theo
+          }
         }
       } else {
         // Non-Reddit / Non-GitHub-Trending: dedup cứng
@@ -148,7 +181,8 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
       }
     }
 
-    // Enqueue new articles for content scraping
+    // Enqueue new articles for content scraping (non-reddit, non-github-trending)
+    // GitHub Trending đã được xử lý inline ở trên, không cần enqueue.
     if (newArticles.length > 0) {
       const normalArticles = newArticles.filter(a => !a.url.includes('reddit.com'));
       const redditArticles = newArticles.filter(a => a.url.includes('reddit.com'));

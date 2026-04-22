@@ -32,16 +32,14 @@ function decodeHtmlEntities(input: string): string {
 }
 
 function parseTranscriptXml(xml: string): string {
-  const textMatches = xml.matchAll(/<text\b[^>]*>([\s\S]*?)<\/text>/g);
-  const parts: string[] = [];
+  // Dùng [^<]* thay [\s\S]*? → không backtrack, nhanh hơn nhiều lần với 1000+ segments.
+  // Join toàn bộ text nodes thành 1 string trước, rồi decode + normalize 1 lần duy nhất
+  // thay vì lặp N lần (mỗi <text> segment N regex ops trước đây).
+  const allText = [...xml.matchAll(/<text\b[^>]*>([^<]*)<\/text>/g)]
+    .map(m => m[1])
+    .join(' ');
 
-  for (const match of textMatches) {
-    const raw = (match[1] || '').replace(/<[^>]+>/g, ' ');
-    const decoded = decodeHtmlEntities(raw).replace(/\s+/g, ' ').trim();
-    if (decoded) parts.push(decoded);
-  }
-
-  return parts.join(' ').trim();
+  return decodeHtmlEntities(allText).replace(/\s+/g, ' ').trim();
 }
 
 function pickSubtitleUrl(subtitles: any[]): string | null {
