@@ -31,8 +31,9 @@
   // This approach is mathematically impossible to trigger while scrolling DOWN
   // because scrollTop can never be < peak - threshold when peak is being updated.
 
-  const MIN_SCROLL_PX = 300     // must be past this before button can appear
-  const UP_DISTANCE_THRESHOLD = 150 // px scrolled up from peak to reveal button
+  const MIN_SCROLL_PX = 150 // must be past this before button can appear
+  const UP_DISTANCE_THRESHOLD = 250 // px scrolled up from peak to reveal button
+  const DESKTOP_ALWAYS_SHOW_PX = 300 // px scrolled down to always show on desktop
 
   let visible = $state(false)
   let peakScrollTop = 0
@@ -51,15 +52,18 @@
       return
     }
 
+    const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768
+    const desktopShow = isDesktop && scrollTop >= DESKTOP_ALWAYS_SHOW_PX
+
     if (scrollTop > peakScrollTop) {
-      // Scrolling down — update peak, always hide
+      // Scrolling down — update peak, always hide unless on desktop past threshold
       peakScrollTop = scrollTop
-      visible = false
+      visible = desktopShow
       return
     }
 
-    // Scrolling up — show only once we've risen enough from the peak
-    visible = scrollTop <= peakScrollTop - UP_DISTANCE_THRESHOLD
+    // Scrolling up — show if on desktop past threshold, OR if we've risen enough from the peak
+    visible = desktopShow || scrollTop <= peakScrollTop - UP_DISTANCE_THRESHOLD
   }
 
   // ── Event wiring ─────────────────────────────────────────────────────────
@@ -106,8 +110,8 @@
   >
     <CusButton
       onclick={onScrollToTop}
-      title="Lên đầu trang"
-      aria-label="Lên đầu trang"
+      title="Top page"
+      aria-label="Top page"
       class="size-12 md:size-10"
     >
       <ChevronUp size={20} />
