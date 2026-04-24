@@ -233,6 +233,66 @@ function cleanFallbackResponse(raw: string): string {
   return text;
 }
 
+// ── Sanitize LaTeX inline math symbols ────────────────────────────────────
+// Gemma models occasionally emit LaTeX notation like $\rightarrow$ instead of
+// Unicode arrows. This post-processor replaces the most common cases so the
+// frontend doesn't need to handle raw LaTeX.
+const LATEX_MAP: [RegExp, string][] = [
+  // Arrows
+  [/\$\\rightarrow\$/g,  '→'],
+  [/\$\\leftarrow\$/g,   '←'],
+  [/\$\\to\$/g,          '→'],
+  [/\$\\gets\$/g,        '←'],
+  [/\$\\Rightarrow\$/g,  '⇒'],
+  [/\$\\Leftarrow\$/g,   '⇐'],
+  [/\$\\leftrightarrow\$/g, '↔'],
+  [/\$\\Leftrightarrow\$/g, '⟺'],
+  [/\$\\uparrow\$/g,     '↑'],
+  [/\$\\downarrow\$/g,   '↓'],
+  // Math ops
+  [/\$\\times\$/g,       '×'],
+  [/\$\\div\$/g,         '÷'],
+  [/\$\\pm\$/g,          '±'],
+  [/\$\\geq\$/g,         '≥'],
+  [/\$\\leq\$/g,         '≤'],
+  [/\$\\neq\$/g,         '≠'],
+  [/\$\\approx\$/g,      '≈'],
+  [/\$\\infty\$/g,       '∞'],
+  [/\$\\cdot\$/g,        '·'],
+  [/\$\\ldots\$/g,       '…'],
+  // Logic / set
+  [/\$\\in\$/g,          '∈'],
+  [/\$\\notin\$/g,       '∉'],
+  [/\$\\subset\$/g,      '⊂'],
+  [/\$\\cup\$/g,         '∪'],
+  [/\$\\cap\$/g,         '∩'],
+  [/\$\\forall\$/g,      '∀'],
+  [/\$\\exists\$/g,      '∃'],
+  // Greek (commonly used in tech content)
+  [/\$\\alpha\$/g,       'α'],
+  [/\$\\beta\$/g,        'β'],
+  [/\$\\gamma\$/g,       'γ'],
+  [/\$\\delta\$/g,       'δ'],
+  [/\$\\epsilon\$/g,     'ε'],
+  [/\$\\lambda\$/g,      'λ'],
+  [/\$\\mu\$/g,          'μ'],
+  [/\$\\sigma\$/g,       'σ'],
+  [/\$\\pi\$/g,          'π'],
+  [/\$\\theta\$/g,       'θ'],
+  [/\$\\omega\$/g,       'ω'],
+];
+
+function sanitizeLatex(text: string): string {
+  let out = text;
+  for (const [pattern, replacement] of LATEX_MAP) {
+    out = out.replace(pattern, replacement);
+  }
+  // Strip any remaining $...$ or $$...$$ blocks (unknown LaTeX) to avoid
+  // raw dollar signs confusing Markdown renderers.
+  out = out.replace(/\$\$[^$]+\$\$/g, '').replace(/\$[^$\n]{1,80}\$/g, '');
+  return out;
+}
+
 // ── callGeminiWithJsonRetry ────────────────────────────────────────────────
 // Gọi AI, parse JSON, nếu lỗi thì retry với model khác (tối đa MAX_RETRIES lần)
 async function callGeminiWithJsonRetry<T>(
@@ -290,19 +350,19 @@ async function summarizeArticleFallback(
   console.log(`🔄 Fallback: using ${model} multi-step for "${title.slice(0, 60)}"`);
 
   // Step 1: short overview
-  const description_vn = cleanFallbackResponse(await callGeminiPlainText(
+  const description_vn = sanitizeLatex(cleanFallbackResponse(await callGeminiPlainText(
     env,
     buildFallbackStep1System(lang),
     buildFallbackStep1User(lang, title, truncatedContent),
-  ));
+  )));
   console.log(`  ✅ Step 1/4 description_vn (${description_vn.length} chars)`);
 
   // Step 2: full markdown summary
-  const summary = cleanFallbackResponse(await callGeminiPlainText(
+  const summary = sanitizeLatex(cleanFallbackResponse(await callGeminiPlainText(
     env,
     buildFallbackStep2System(lang),
     buildFallbackStep2User(lang, title, truncatedContent),
-  ));
+  )));
   console.log(`  ✅ Step 2/4 summary (${summary.length} chars)`);
 
   // Step 3: hot_score
@@ -360,6 +420,8 @@ export async function summarizeArticle(
 
     result.hot_score = Math.max(1, Math.min(10, Math.round(result.hot_score)));
     result.tags = result.tags.slice(0, 3).map(String);
+    result.description_vn = sanitizeLatex(result.description_vn);
+    result.summary = sanitizeLatex(result.summary);
     return result;
   } catch (primaryErr: any) {
     // Content permanently blocked — don't waste API calls on fallback
