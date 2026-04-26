@@ -335,8 +335,8 @@ a:focus-visible {
 }
 
 /* ═══════════════ MOBILE SHEET (custom) ═══════════════ */
-#news-mobile-sheet-panel,
-#news-mobile-sheet-backdrop {
+.drawer-sheet-panel,
+.drawer-sheet-backdrop {
   transition:
     transform 0.6s cubic-bezier(0.32, 0.72, 0, 1),
     opacity 0.6s cubic-bezier(0.32, 0.72, 0, 1);

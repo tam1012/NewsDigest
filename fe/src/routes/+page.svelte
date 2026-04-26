@@ -4,7 +4,7 @@
   import { goto } from '$app/navigation'
   import { filters } from '$lib/stores/articles.svelte'
   import { prefs, cycleFontSize } from '$lib/stores/prefs'
-  import { CaseSensitive, Loader2, Sparkles, X } from 'lucide-svelte'
+  import { Loader2, Settings, Sparkles, X } from 'lucide-svelte'
   import type { Article } from '$lib/types'
   import { sources } from '$lib/stores/sources'
   import { api } from '$lib/api'
@@ -18,7 +18,7 @@
   import WelcomePanel from '$lib/components/app/WelcomePanel.svelte'
   import { getStoredAdminKey } from '$lib/admin'
   import DateNavigator from '$lib/components/app/DateNavigator.svelte'
-  import ThemeToggle from '$lib/components/app/ThemeToggle.svelte'
+  import MobileSettingsSheet from '$lib/components/app/MobileSettingsSheet.svelte'
   import ArticleListSkeleton from '$lib/components/app/ArticleListSkeleton.svelte'
   import DigestView from '$lib/components/app/DigestView.svelte'
   import ArticleListItem from '$lib/components/app/ArticleListItem.svelte'
@@ -62,6 +62,7 @@
 
   // ── Mobile / Drawer state ──────────────────────────────────
   let drawerOpen = $state(false)
+  let settingsSheetOpen = $state(false)
   // True while PullToRefresh indicator is visible → nav becomes transparent
   let ptrActive = $state(false)
 
@@ -521,21 +522,14 @@
         onNext={() => goToDate(1)}
         class="size-12"
       />
-      <div class="flex gap-2">
-        <CusButton
-          onclick={() => ($prefs.fontSize = cycleFontSize($prefs.fontSize))}
-          class="size-12"
-          aria-label="Đổi cỡ chữ"
-          title="Đổi cỡ chữ"
-        >
-          <CaseSensitive size={18} />
-        </CusButton>
-        <ThemeToggle
-          darkMode={$prefs.darkMode}
-          onToggle={() => ($prefs.darkMode = !$prefs.darkMode)}
-          class="size-12"
-        />
-      </div>
+      <CusButton
+        onclick={() => (settingsSheetOpen = true)}
+        class="size-12"
+        aria-label="Cài đặt"
+        title="Cài đặt"
+      >
+        <Settings size={18} />
+      </CusButton>
     </nav>
 
     <!-- Enqueue toast (mobile) -->
@@ -649,6 +643,13 @@
     onNext={goToNextArticle}
     onClose={() => {
       drawerOpen = false
+    }}
+  />
+
+  <MobileSettingsSheet
+    open={settingsSheetOpen}
+    onClose={() => {
+      settingsSheetOpen = false
     }}
   />
 </div>
