@@ -125,7 +125,7 @@ sources.post('/:id/fetch', async (c) => {
     const source = await SourceRepo.findById(c.env.DB, sourceId);
     if (!source) return c.json({ error: 'Not found' }, 404);
 
-    const { fetchSource } = await import('../../cron/scraper');
+    const { fetchSource } = await import('../../scraper');
     try {
         const articles = await fetchSource(source, c.env);
         let insertedCount = 0;

@@ -1,6 +1,6 @@
 import { Env, Source, ContentScrapeMessage } from '../types';
 import { ArticleRepo, SourceRepo } from '../db';
-import { fetchSource } from './scraper';
+import { fetchSource } from '../scraper';
 import { stripHtmlToText } from '../scraper/utils';
 import { githubFetcher } from '../queue/fetchers/github';
 import { summarizeArticle } from '../ai/summarizer';

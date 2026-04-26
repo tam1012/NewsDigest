@@ -1,4 +1,5 @@
 import { Source, ArticleInput } from '../../types';
+import { NetworkError, RateLimitError } from '../../errors';
 
 export async function fetchGitHubTrending(source: Source): Promise<ArticleInput[]> {
   const response = await fetch(source.url, {
@@ -8,7 +9,10 @@ export async function fetchGitHubTrending(source: Source): Promise<ArticleInput[
     },
     signal: AbortSignal.timeout(15000),
   });
-  if (!response.ok) throw new Error(`GitHub Trending failed: ${response.status}`);
+  if (!response.ok) {
+    if (response.status === 429) throw new RateLimitError(`GitHub Trending rate-limited: ${response.status}`, source.url);
+    throw new NetworkError(`GitHub Trending failed: ${response.status}`, response.status, source.url);
+  }
 
   const results: ArticleInput[] = [];
   let currentRepo = '';

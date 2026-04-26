@@ -1,5 +1,5 @@
 import { Env } from '../../types';
-import { extractArticleContent } from '../../cron/scraper';
+import { extractArticleContent } from '../../scraper';
 import type { ContentFetcher } from './index.ts';
 
 /**

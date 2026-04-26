@@ -1,11 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
-
-/** Chuẩn hoá mọi định dạng ngày (RFC 2822, ISO 8601…) về ISO 8601 UTC. */
-export function normalizeDate(raw?: string | null): string {
-  if (!raw) return new Date().toISOString();
-  const d = new Date(raw);
-  return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
-}
+export { normalizeDate } from '../utils/date';
 
 export function nodeText(value: any): string {
   if (value === null || value === undefined) return '';
@@ -203,4 +197,3 @@ export function stripHtmlToText(html: string): string {
       .trim()
   );
 }
-

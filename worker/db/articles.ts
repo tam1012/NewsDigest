@@ -262,23 +262,3 @@ export async function cleanOldUnsummarized(db: D1Database, cutoff: string): Prom
 export async function deleteBySourceId(db: D1Database, sourceId: string): Promise<void> {
   await db.prepare('DELETE FROM articles WHERE source_id = ?').bind(sourceId).run();
 }
-
-// ── Batch operations ──────────────────────────────────────────────────────
-
-/** Batch update summary fields (used by Dify integration). */
-export async function batchUpdateSummary(
-  db: D1Database,
-  items: { id: string; summary: string; hot_score?: number; tags?: string[] }[]
-): Promise<number> {
-  const statements = items
-    .filter(item => item.id && item.summary)
-    .map(item =>
-      db.prepare('UPDATE articles SET summary = ?, hot_score = ?, tags = ? WHERE id = ?')
-        .bind(item.summary, item.hot_score || 5, JSON.stringify(item.tags || []), item.id)
-    );
-
-  if (statements.length > 0) {
-    await db.batch(statements);
-  }
-  return statements.length;
-}

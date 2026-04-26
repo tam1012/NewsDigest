@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { Env } from '../../types';
 import { ArticleRepo } from '../../db';
 import { requireAdmin } from '../utils';
+import { assertSafePublicHttpUrl } from '../../utils/url-safety';
 
 const articles = new Hono<{ Bindings: Env }>();
 
@@ -55,6 +56,9 @@ articles.get('/:id', async (c) => {
  * Sẽ fetch song song (tối đa 5 cùng lúc) và update content vào DB.
  */
 articles.post('/enrich', async (c) => {
+    const authErr = requireAdmin(c);
+    if (authErr) return authErr;
+
     const body = await c.req.json();
     const ids = body.ids;
     const force = body.force === true;
@@ -69,7 +73,7 @@ articles.post('/enrich', async (c) => {
         return c.json({ ok: true, enriched: 0, message: 'No articles found' });
     }
 
-    const { extractArticleContent } = await import('../../cron/scraper');
+    const { extractArticleContent } = await import('../../scraper');
     const enrichResults: { id: string; success: boolean; chars: number; skipped?: boolean; note?: string }[] = [];
 
     // Kiểm tra content có phải rác không
@@ -129,7 +133,8 @@ articles.post('/enrich', async (c) => {
                 return { id: art.id, success: false, chars: 0, note: 'HN text post with no content' };
             }
 
-            const content = await extractArticleContent(fetchUrl, c.env);
+            const safeFetchUrl = assertSafePublicHttpUrl(fetchUrl).toString();
+            const content = await extractArticleContent(safeFetchUrl, c.env);
             if (content && content.length > 50) {
                 await ArticleRepo.updateContent(c.env.DB, art.id, content);
                 return { id: art.id, success: true, chars: content.length };
@@ -154,6 +159,9 @@ articles.post('/enrich', async (c) => {
  * - force: true = enqueue cả những bài đã có content
  */
 articles.post('/enqueue-scrape', async (c) => {
+    const authErr = requireAdmin(c);
+    if (authErr) return authErr;
+
     const body = await c.req.json().catch(() => ({}));
     const limit = Math.min(body.limit || 50, 200);
     const force = body.force === true;
@@ -253,22 +261,6 @@ articles.post('/resummarize', async (c) => {
     }
 
     return c.json({ ok: true, summarized, failed, total: results.length, results: summaryResults });
-});
-
-// ── POST /api/articles/summarize (Dify integration) ──────
-
-/**
- * Dify gửi kết quả AI summarize về.
- * Body: { results: [{ id, summary, hot_score, tags }] }
- */
-articles.post('/summarize', async (c) => {
-    const { results } = await c.req.json();
-    if (!Array.isArray(results) || results.length === 0) {
-        return c.json({ error: 'Invalid body: results array required' }, 400);
-    }
-
-    const updated = await ArticleRepo.batchUpdateSummary(c.env.DB, results);
-    return c.json({ ok: true, updated });
 });
 
 export default articles;

@@ -1,11 +1,15 @@
 import { Source, ArticleInput } from '../../types';
+import { NetworkError, RateLimitError } from '../../errors';
 
 export async function fetchReddit(source: Source): Promise<ArticleInput[]> {
   const url = source.url.endsWith('/') ? `${source.url}hot.json?limit=15` : `${source.url}/hot.json?limit=15`;
   const response = await fetch(url, {
     headers: { 'User-Agent': 'NewsDigest/1.0 (news aggregation bot)' }
   });
-  if (!response.ok) throw new Error(`Reddit API failed: ${response.status}`);
+  if (!response.ok) {
+    if (response.status === 429) throw new RateLimitError(`Reddit API rate-limited: ${response.status}`, url);
+    throw new NetworkError(`Reddit API failed: ${response.status}`, response.status, url);
+  }
 
   const data: any = await response.json();
   const children = data?.data?.children || [];

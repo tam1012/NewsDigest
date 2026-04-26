@@ -1,7 +1,7 @@
 import { Env } from '../types';
 import { ProhibitedContentError } from '../errors';
 import { buildPromptConfig, PromptConfig } from './prompt-config';
-import { buildGeminiRequest } from './client';
+import { callGemini as callGeminiApi, extractJson } from './gemini';
 import {
   buildSystemPrompt,
   buildDigestPrompt,
@@ -40,58 +40,6 @@ function getOtherModel(current: string): string {
   return current === MODELS[0] ? MODELS[1] : MODELS[0];
 }
 
-// ── JSON Auto-Repair & Extraction ─────────────────────────────────────────
-// Thứ tự ưu tiên:
-// 1. Parse thẳng (ideal case)
-// 2. Tách khỏi markdown code block (```json ... ```)
-// 3. Tìm { ... } đầu tiên bằng regex
-// 4. Throw nếu không cứu được
-function extractJson<T>(raw: string): T {
-  const text = raw.trim();
-
-  // 1. Raw parse
-  try { return JSON.parse(text); } catch {}
-
-  // 2. Markdown code block
-  const blockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (blockMatch) {
-    try { return JSON.parse(blockMatch[1].trim()); } catch {}
-  }
-
-  // 3. Extract first {...} (handles garbage prefix/suffix)
-  const braceMatch = text.match(/\{[\s\S]*\}/);
-  if (braceMatch) {
-    try { return JSON.parse(braceMatch[0]); } catch (e: any) {
-      // 4. Try to repair common issues: truncated JSON → incomplete string/array
-      const repaired = braceMatch[0]
-        .replace(/,\s*$/, '')     // trailing comma
-        .replace(/([^\\])"$/, '$1"}')  // unclosed string
-        + (braceMatch[0].split('{').length > braceMatch[0].split('}').length ? '}' : '');
-      try { return JSON.parse(repaired); } catch {}
-    }
-  }
-
-  throw new Error(`Cannot extract valid JSON from: ${text.slice(0, 150)}`);
-}
-
-// ── Extract response text (skip thinking parts) ──────────────────────────
-// Gemma models return multi-part responses where parts with `thought: true`
-// are internal reasoning. We need the actual answer part.
-function extractResponseText(data: any): string | null {
-  const parts = data?.candidates?.[0]?.content?.parts;
-  if (!Array.isArray(parts) || parts.length === 0) return null;
-
-  // Find the last non-thinking part (the actual answer)
-  for (let i = parts.length - 1; i >= 0; i--) {
-    if (!parts[i].thought && parts[i].text) {
-      return parts[i].text;
-    }
-  }
-
-  // Fallback: return first part with text (even if thinking)
-  return parts[0]?.text ?? null;
-}
-
 // ── AI API Call (JSON mode) ────────────────────────────────────────────────
 async function callGemini(
   env: Env,
@@ -101,52 +49,22 @@ async function callGemini(
   attempt = 1,
   timeoutMs?: number,
 ): Promise<string> {
-  const { url, headers } = buildGeminiRequest(env, model);
-
-  const body = {
-    systemInstruction: { parts: [{ text: systemPrompt }] },
-    contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+  return callGeminiApi({
+    systemPrompt,
+    userPrompt,
+    model,
+    getOtherModel,
     generationConfig: {
       temperature: 0.3,
       maxOutputTokens: 2048,
       responseMimeType: 'application/json',
     },
-  };
-
-  const timeout = timeoutMs ?? 60000;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(timeout),
-  });
-
-  // Rate-limited → switch to the other model and retry
-  if (res.status === 429) {
-    if (attempt >= MAX_RETRIES) throw new Error(`${model} rate limit (429) after max retries`);
-    const nextModel = getOtherModel(model);
-    const wait = attempt * 2000; // 2s, 4s, 6s — short wait since other model is likely not rate-limited
-    console.log(`⏳ ${model} 429 — switching to ${nextModel}, waiting ${wait / 1000}s (retry ${attempt + 1}/${MAX_RETRIES})`);
-    await new Promise(r => setTimeout(r, wait));
-    return callGemini(env, systemPrompt, userPrompt, nextModel, attempt + 1, timeoutMs);
-  }
-
-  if (!res.ok) {
-    const err = await res.text().catch(() => '');
-    throw new Error(`AI API error [${model}] ${res.status}: ${err.slice(0, 200)}`);
-  }
-
-  const data: any = await res.json();
-
-  // Detect content blocked by safety filters — no point retrying
-  const blockReason = data?.promptFeedback?.blockReason;
-  if (blockReason) {
-    throw new ProhibitedContentError(blockReason);
-  }
-
-  const text = extractResponseText(data);
-  if (!text) throw new Error('Empty AI response');
-  return text;
+    timeoutMs,
+    attempt,
+    maxRetries: MAX_RETRIES,
+    retryOnStatuses: [429],
+    retryBackoffMsBase: 2000,
+  }, env);
 }
 
 // ── AI API Call (Plain Text mode — no responseMimeType) ────────────────────
@@ -159,49 +77,21 @@ async function callGeminiPlainText(
   timeoutMs = 60000,
   attempt = 1,
 ): Promise<string> {
-  const { url, headers } = buildGeminiRequest(env, model);
-
-  const body = {
-    systemInstruction: { parts: [{ text: systemPrompt }] },
-    contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+  const text = await callGeminiApi({
+    systemPrompt,
+    userPrompt,
+    model,
+    getOtherModel,
     generationConfig: {
       temperature: 0.3,
       maxOutputTokens: 2048,
     },
-  };
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-
-  // Rate-limited → switch to the other model and retry (same as callGemini)
-  if (res.status === 429) {
-    if (attempt >= MAX_RETRIES) throw new Error(`${model} rate limit (429) after max retries`);
-    const nextModel = getOtherModel(model);
-    const wait = attempt * 2000;
-    console.log(`⏳ [plaintext] ${model} 429 — switching to ${nextModel}, waiting ${wait / 1000}s (retry ${attempt + 1}/${MAX_RETRIES})`);
-    await new Promise(r => setTimeout(r, wait));
-    return callGeminiPlainText(env, systemPrompt, userPrompt, nextModel, timeoutMs, attempt + 1);
-  }
-
-  if (!res.ok) {
-    const err = await res.text().catch(() => '');
-    throw new Error(`AI API error [${model}] ${res.status}: ${err.slice(0, 200)}`);
-  }
-
-  const data: any = await res.json();
-
-  // Detect content blocked by safety filters — no point retrying
-  const blockReason = data?.promptFeedback?.blockReason;
-  if (blockReason) {
-    throw new ProhibitedContentError(blockReason);
-  }
-
-  const text = extractResponseText(data);
-  if (!text) throw new Error(`Empty ${model} response`);
+    timeoutMs,
+    attempt,
+    maxRetries: MAX_RETRIES,
+    retryOnStatuses: [429],
+    retryBackoffMsBase: 2000,
+  }, env);
   return text.trim();
 }
 
@@ -249,7 +139,7 @@ async function callGeminiWithJsonRetry<T>(
     try {
       console.log(`🤖 Attempt ${attempt}/${MAX_RETRIES} using ${model}`);
       const raw = await callGemini(env, systemPrompt, userPrompt, model, 1, timeoutMs);
-      const result = extractJson<T>(raw);
+      const result = extractJson<T>(raw, { repair: true });
       if (attempt > 1) console.log(`✅ JSON valid on attempt ${attempt}`);
       return result;
     } catch (err: any) {

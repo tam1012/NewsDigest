@@ -1,6 +1,7 @@
 import { XMLParser } from 'fast-xml-parser';
 import { Env, Source } from '../types';
 import type { Context } from 'hono';
+import { normalizeDate } from '../utils/date';
 
 // ── Auth ─────────────────────────────────────────────────
 
@@ -15,14 +16,7 @@ export function requireAdmin(c: Context<{ Bindings: Env }>): Response | null {
   return null;
 }
 
-// ── Date helpers ─────────────────────────────────────────
-
-/** Chuẩn hoá published_at về ISO 8601 UTC. */
-export function normalizeDate(raw?: string | null): string {
-  if (!raw) return new Date().toISOString();
-  const d = new Date(raw);
-  return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
-}
+export { normalizeDate };
 
 // ── Source resolver ──────────────────────────────────────
 

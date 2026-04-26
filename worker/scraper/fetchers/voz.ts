@@ -1,10 +1,14 @@
 import { Source, ArticleInput } from '../../types';
+import { NetworkError, RateLimitError } from '../../errors';
 
 export async function fetchVoz(source: Source): Promise<ArticleInput[]> {
   const response = await fetch(source.url, {
     headers: { 'User-Agent': 'NewsDigest/1.0.0' }
   });
-  if (!response.ok) throw new Error(`VOZ failed: ${response.status}`);
+  if (!response.ok) {
+    if (response.status === 429) throw new RateLimitError(`VOZ rate-limited: ${response.status}`, source.url);
+    throw new NetworkError(`VOZ failed: ${response.status}`, response.status, source.url);
+  }
 
   const results: ArticleInput[] = [];
   let currentTitle = "";

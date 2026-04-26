@@ -1,5 +1,6 @@
 import { Env } from '../../types';
 import { ConfigError, ContentUnavailableError, NetworkError } from '../../errors';
+import { decodeEntities } from '../../scraper/utils';
 import type { ContentFetcher } from './index.ts';
 
 const MAX_CHARS = 25000;
@@ -19,18 +20,6 @@ function extractVideoId(url: string): string | null {
   return null;
 }
 
-function decodeHtmlEntities(input: string): string {
-  return input
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number.parseInt(dec, 10)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)))
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&nbsp;/g, ' ');
-}
-
 function parseTranscriptXml(xml: string): string {
   // Dùng [^<]* thay [\s\S]*? → không backtrack, nhanh hơn nhiều lần với 1000+ segments.
   // Join toàn bộ text nodes thành 1 string trước, rồi decode + normalize 1 lần duy nhất
@@ -39,7 +28,7 @@ function parseTranscriptXml(xml: string): string {
     .map(m => m[1])
     .join(' ');
 
-  return decodeHtmlEntities(allText).replace(/\s+/g, ' ').trim();
+  return decodeEntities(allText).replace(/\s+/g, ' ').trim();
 }
 
 function pickSubtitleUrl(subtitles: any[]): string | null {

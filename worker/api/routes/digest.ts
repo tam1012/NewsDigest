@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import { Env } from '../../types';
 import { DigestRepo } from '../../db';
+import { requireAdmin } from '../utils';
+import { getVnDateString } from '../../utils/date';
 
 const digest = new Hono<{ Bindings: Env }>();
 
@@ -12,10 +14,7 @@ const digest = new Hono<{ Bindings: Env }>();
  */
 digest.get('/', async (c) => {
     const dateParam = c.req.query('date');
-    // Default to today VN
-    const now = new Date();
-    const vnNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-    const dateStr = dateParam || vnNow.toISOString().slice(0, 10);
+    const dateStr = dateParam || getVnDateString();
 
     const result = await DigestRepo.findByDate(c.env.DB, dateStr);
     return c.json({ digest: result ?? null });
@@ -28,13 +27,13 @@ digest.get('/', async (c) => {
  * Body: { digest_date?, summary_text }
  */
 digest.post('/', async (c) => {
+    const authErr = requireAdmin(c);
+    if (authErr) return authErr;
+
     const { digest_date, summary_text } = await c.req.json();
     if (!summary_text) return c.json({ error: 'summary_text required' }, 400);
 
-    // Default to today VN if no date provided
-    const now = new Date();
-    const vnNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-    const dateStr = digest_date || vnNow.toISOString().slice(0, 10);
+    const dateStr = digest_date || getVnDateString();
 
     await DigestRepo.upsert(c.env.DB, {
         date: dateStr,
@@ -51,6 +50,9 @@ digest.post('/', async (c) => {
  * Manual trigger digest generation.
  */
 digest.post('/generate', async (c) => {
+    const authErr = requireAdmin(c);
+    if (authErr) return authErr;
+
     const { scheduledDigest } = await import('../../cron/digest');
     await scheduledDigest(c.env);
     return c.json({ ok: true, message: 'Digest generation triggered' });

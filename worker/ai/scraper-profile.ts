@@ -1,5 +1,5 @@
 import { Env, ListingProfileConfig, ScraperProfileConfig } from '../types';
-import { buildGeminiRequest } from './client';
+import { callGemini as callGeminiApi, extractJson as extractJsonValue } from './gemini';
 
 // Hai model Gemma 4 cùng rate limit → gấp đôi throughput
 const MODELS = ['gemma-4-31b-it', 'gemma-4-26b-a4b-it'] as const;
@@ -54,25 +54,7 @@ Rules:
 
 
 export function extractJson<T>(raw: string): T {
-  const text = raw.trim();
-
-  try {
-    return JSON.parse(text);
-  } catch {}
-
-  const blockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (blockMatch) {
-    try {
-      return JSON.parse(blockMatch[1].trim());
-    } catch {}
-  }
-
-  const braceMatch = text.match(/\{[\s\S]*\}/);
-  if (braceMatch) {
-    return JSON.parse(braceMatch[0]);
-  }
-
-  throw new Error('Cannot extract JSON from AI response');
+  return extractJsonValue<T>(raw, { errorPrefix: 'Cannot extract JSON from AI response' });
 }
 
 export async function callGemini(
@@ -82,64 +64,22 @@ export async function callGemini(
   model = pickModel(),
   attempt = 1
 ): Promise<string> {
-  const { url, headers } = buildGeminiRequest(env, model);
-
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 1024,
-          responseMimeType: 'application/json',
-        },
-      }),
-      signal: AbortSignal.timeout(60000),
-    });
-  } catch (err: any) {
-    // Retry khi network timeout (AbortError / TimeoutError) hoặc lỗi mạng
-    const isRetryable = err.name === 'AbortError' || err.name === 'TimeoutError';
-    if (isRetryable && attempt < MAX_RETRIES) {
-      await new Promise((r) => setTimeout(r, 1000 * attempt));
-      return callGemini(env, systemPrompt, prompt, model, attempt + 1);
-    }
-    throw err;
-  }
-
-  if (res.status === 429 && attempt < MAX_RETRIES) {
-    const nextModel = getOtherModel(model);
-    console.log(`⏳ ${model} 429 → switching to ${nextModel}`);
-    await new Promise((r) => setTimeout(r, 1000 * attempt));
-    return callGemini(env, systemPrompt, prompt, nextModel, attempt + 1);
-  }
-
-  // 503 overload → switch model and retry
-  if (res.status === 503 && attempt < MAX_RETRIES) {
-    const nextModel = getOtherModel(model);
-    await new Promise((r) => setTimeout(r, 1000 * attempt));
-    return callGemini(env, systemPrompt, prompt, nextModel, attempt + 1);
-  }
-
-  if (!res.ok) {
-    throw new Error(`Profile AI error [${model}] ${res.status}: ${await res.text()}`);
-  }
-
-  const data: any = await res.json();
-  const parts = data?.candidates?.[0]?.content?.parts;
-  let text: string | undefined;
-  if (Array.isArray(parts)) {
-    // Skip thinking parts (model returns thought: true for internal reasoning)
-    for (let i = parts.length - 1; i >= 0; i--) {
-      if (!parts[i].thought && parts[i].text) { text = parts[i].text; break; }
-    }
-    if (!text) text = parts[0]?.text;
-  }
-  if (!text) throw new Error('Profile AI response empty');
-  return text;
+  return callGeminiApi({
+    systemPrompt,
+    userPrompt: prompt,
+    model,
+    getOtherModel,
+    generationConfig: {
+      temperature: 0.1,
+      maxOutputTokens: 1024,
+      responseMimeType: 'application/json',
+    },
+    attempt,
+    maxRetries: MAX_RETRIES,
+    retryOnStatuses: [429, 503],
+    retryOnTimeout: true,
+    retryBackoffMsBase: 1000,
+  }, env);
 }
 
 function isContentSelectorTooGeneric(selector: string): boolean {

@@ -1,6 +1,7 @@
 import { Env } from '../types';
 import { NetworkError, ContentUnavailableError } from '../errors';
 import { SiteProfile, resolveStaticProfile } from '../cron/site-profiles';
+import { assertSafePublicHttpUrl } from '../utils/url-safety';
 import { decodeEntities, sanitizeHtmlForAi } from './utils';
 import {
   ExtractResult,
@@ -102,7 +103,9 @@ export async function extractFromHtmlWithProfile(html: string, profile: SiteProf
  */
 export async function extractArticleContent(url: string, env: Env): Promise<string> {
   try {
-    const response = await fetch(url, {
+    const safeUrl = assertSafePublicHttpUrl(url);
+
+    const response = await fetch(safeUrl.toString(), {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml',
@@ -120,7 +123,7 @@ export async function extractArticleContent(url: string, env: Env): Promise<stri
       throw new ContentUnavailableError(`Not an HTML page (content-type: ${contentType})`, url);
     }
 
-    const finalUrl = response.url || url;
+    const finalUrl = assertSafePublicHttpUrl(response.url || safeUrl.toString()).toString();
     const domain = new URL(finalUrl).hostname.replace(/^www\./, '').toLowerCase();
     const html = await response.text();
     if (!html) return '';

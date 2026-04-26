@@ -3,6 +3,7 @@ import { ArticleRepo } from '../db';
 import { summarizeArticle } from '../ai/summarizer';
 import { ProhibitedContentError, ContentUnavailableError, retryStrategy } from '../errors';
 import { resolveFetcher } from './fetchers';
+import { assertSafePublicHttpUrl } from '../utils/url-safety';
 
 /**
  * Queue Consumer — Receives a batch of article URLs, fetches their content,
@@ -35,8 +36,9 @@ export async function handleContentQueue(
       let content = status?.content || '';
 
       if (!content) {
-        const fetcher = resolveFetcher(url);
-        content = await fetcher.fetch(url, env);
+        const safeUrl = assertSafePublicHttpUrl(url).toString();
+        const fetcher = resolveFetcher(safeUrl);
+        content = await fetcher.fetch(safeUrl, env);
 
         if (content) {
           await ArticleRepo.updateContent(env.DB, articleId, content);

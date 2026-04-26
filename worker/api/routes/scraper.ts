@@ -110,7 +110,7 @@ interface ProfileTestContext {
 
 async function testArticleProfile(c: any, { finalUrl, domain, html, cleanedHtml, save }: ProfileTestContext) {
     const { callGemini, extractJson, normalizeConfig } = await import('../../ai/scraper-profile');
-    const { extractFromHtmlWithProfile, normalizeProfile } = await import('../../cron/scraper');
+    const { extractFromHtmlWithProfile, normalizeProfile } = await import('../../scraper');
     const { resolveStaticProfile } = await import('../../cron/site-profiles');
 
     const ARTICLE_SYSTEM_PROMPT = `
@@ -223,7 +223,7 @@ Rules:
 
 async function testListingProfile(c: any, { finalUrl, domain, html, cleanedHtml, save }: ProfileTestContext) {
     const { callGemini, extractJson, normalizeListingConfig } = await import('../../ai/scraper-profile');
-    const { extractListingWithSelectorSet, buildListingArticles, normalizeListingProfile } = await import('../../cron/scraper');
+    const { extractListingWithSelectorSet, buildListingArticles, normalizeListingProfile } = await import('../../scraper');
 
     const LISTING_SYSTEM_PROMPT = `
 You are an expert web scraping engineer.
