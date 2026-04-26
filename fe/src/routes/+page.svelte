@@ -225,10 +225,15 @@
   // Extract unique article IDs referenced in the digest text via <id:uuid> markers
   let digestArticleIds = $derived.by(() => {
     if (!digest?.summary_text) return []
-    const matches = [...digest.summary_text.matchAll(/<id:([a-f0-9-]+)>/gi)]
+    const matches = [...digest.summary_text.matchAll(/<id:([a-f0-9][a-f0-9,\s-]*)>/gi)]
     const seen = new Set<string>()
     return matches
-      .map((m) => m[1])
+      .flatMap((m) =>
+        m[1]
+          .split(',')
+          .map((id) => id.trim())
+          .filter((id) => /^[a-f0-9-]+$/.test(id)),
+      )
       .filter((id) => {
         if (seen.has(id)) return false
         seen.add(id)
@@ -451,13 +456,20 @@
     return $sources.find((s) => s.id === id)?.name || 'Unknown'
   }
 
-  // Parse digest summary_text: replace <id:uuid> with clickable article anchors
+  // Parse digest summary_text: replace <id:...> with clickable article anchors.
+  // Handles both single IDs and comma-separated multi-ID tags emitted by the AI,
+  // e.g. <id:ef037f04, b197daac, 65490e6d> → 3 separate source buttons.
   let parsedDigestHtml = $derived.by(() => {
     if (!digest?.summary_text) return ''
     const processed = digest.summary_text.replace(
-      /<id:([a-f0-9-]+)>/gi,
-      (_match: string, id: string) => {
-        return `<button class="digest-article-ref" data-article-id="${id}">source</button>`
+      /<id:([a-f0-9][a-f0-9,\s-]*)>/gi,
+      (_match: string, ids: string) => {
+        return ids
+          .split(',')
+          .map((id) => id.trim())
+          .filter((id) => /^[a-f0-9-]+$/.test(id))
+          .map((id) => `<button class="digest-article-ref" data-article-id="${id}">source</button>`)
+          .join('')
       },
     )
     return marked.parse(processed) as string
