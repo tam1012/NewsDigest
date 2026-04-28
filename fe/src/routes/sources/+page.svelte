@@ -60,8 +60,8 @@
     return source as unknown as Source
   }
 
-  async function fetchSources() {
-    loading = true
+  async function fetchSources(showLoading = true) {
+    if (showLoading) loading = true
     pageError = ''
     try {
       const res = await fetch(api('/api/sources'))
@@ -202,7 +202,7 @@
       newUrl = ''
       newName = ''
 
-      await fetchSources()
+      await fetchSources(false)
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Không thể thêm nguồn tin.'
@@ -319,7 +319,7 @@
       toast.success(`Fetch ${result.fetched} bài, +${result.inserted} mới${enqueued > 0 ? `, ${enqueued} đã vào queue tóm tắt` : ''}.`, {
         id: toastId,
       })
-      await fetchSources()
+      await fetchSources(false)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Fetch thất bại.'
       toast.error(message, { id: toastId })
