@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Env } from '../../types';
 import { SourceRepo, ArticleRepo } from '../../db';
-import { requireAdmin, normalizeDate, resolveSource, ALLOWED_SOURCE_TYPES } from '../utils';
+import { requireAdmin, normalizeDate, resolveSource, ALLOWED_SOURCE_TYPES, safeJson } from '../utils';
 import { stripHtmlToText } from '../../scraper/utils';
 
 const sources = new Hono<{ Bindings: Env }>();
@@ -19,7 +19,9 @@ sources.post('/resolve', async (c) => {
     const authErr = requireAdmin(c);
     if (authErr) return authErr;
 
-    const { url } = await c.req.json();
+    const parsed = await safeJson<{ url?: string }>(c);
+    if (!parsed.ok) return parsed.response;
+    const { url } = parsed.data;
     if (!url || typeof url !== 'string') return c.json({ error: 'url is required' }, 400);
 
     try {
@@ -36,7 +38,9 @@ sources.post('/', async (c) => {
     const authErr = requireAdmin(c);
     if (authErr) return authErr;
 
-    const { url, name, channel_id } = await c.req.json();
+    const parsed = await safeJson<{ url?: string; name?: string; channel_id?: string | null }>(c);
+    if (!parsed.ok) return parsed.response;
+    const { url, name, channel_id } = parsed.data;
     if (!url || typeof url !== 'string') return c.json({ error: 'url is required' }, 400);
 
     let resolved;
@@ -79,7 +83,15 @@ sources.patch('/:id', async (c) => {
     if (authErr) return authErr;
 
     const id = c.req.param('id');
-    const body = await c.req.json();
+    const parsed = await safeJson<{
+      enabled?: boolean;
+      name?: string;
+      channel_id?: string | null;
+      url?: string;
+      type?: 'rss' | 'html' | 'reddit' | 'youtube' | 'voz' | 'github-trending';
+    }>(c);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.data;
     const fields: Parameters<typeof SourceRepo.update>[2] = {};
 
     if (body.enabled !== undefined) { fields.enabled = body.enabled ? 1 : 0; }

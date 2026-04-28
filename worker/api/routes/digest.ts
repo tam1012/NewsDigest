@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Env } from '../../types';
 import { DigestRepo } from '../../db';
-import { requireAdmin } from '../utils';
+import { requireAdmin, safeJson } from '../utils';
 import { getVnDateString } from '../../utils/date';
 
 const digest = new Hono<{ Bindings: Env }>();
@@ -30,7 +30,9 @@ digest.post('/', async (c) => {
     const authErr = requireAdmin(c);
     if (authErr) return authErr;
 
-    const { digest_date, summary_text } = await c.req.json();
+    const parsed = await safeJson<{ digest_date?: string; summary_text?: string }>(c);
+    if (!parsed.ok) return parsed.response;
+    const { digest_date, summary_text } = parsed.data;
     if (!summary_text) return c.json({ error: 'summary_text required' }, 400);
 
     const dateStr = digest_date || getVnDateString();

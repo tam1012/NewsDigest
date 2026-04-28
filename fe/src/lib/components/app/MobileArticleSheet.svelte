@@ -23,6 +23,19 @@
 
   const drawer = createDrawer(() => open, () => onClose?.())
 
+  const doubleTapMs = 280
+  const maxTapDurationMs = 260
+  const maxTapMovePx = 12
+
+  let prevPressSignal = $state(0)
+  let nextPressSignal = $state(0)
+  let tapStartX = $state(0)
+  let tapStartY = $state(0)
+  let tapStartAt = $state(0)
+  let lastTapAt = $state(0)
+  let lastTapX = $state(0)
+  let lastTapY = $state(0)
+
   let currentIndex = $derived.by(() => {
     if (!selectedArticle) return -1
     return filteredArticles.findIndex((a) => a.id === selectedArticle.id)
@@ -39,6 +52,65 @@
       drawer.drawerBody.scrollTop = 0
     }
   })
+
+  function isInteractiveTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof Element)) return false
+    return !!target.closest('a, button, input, textarea, select, [role="button"]')
+  }
+
+  function onSheetTouchStart(e: TouchEvent) {
+    drawer.onBodyTouchStart(e)
+    const touch = e.changedTouches[0]
+    if (!touch) return
+    tapStartX = touch.clientX
+    tapStartY = touch.clientY
+    tapStartAt = performance.now()
+  }
+
+  function onSheetTouchMove(e: TouchEvent) {
+    drawer.onBodyTouchMove(e)
+  }
+
+  function onSheetTouchEnd(e: TouchEvent) {
+    drawer.onBodyTouchEnd()
+    if (!open || !selectedArticle || isInteractiveTarget(e.target)) return
+
+    const touch = e.changedTouches[0]
+    if (!touch) return
+
+    const now = performance.now()
+    const dx = touch.clientX - tapStartX
+    const dy = touch.clientY - tapStartY
+    const moved = Math.hypot(dx, dy)
+    const tapDuration = now - tapStartAt
+
+    if (moved > maxTapMovePx || tapDuration > maxTapDurationMs) {
+      lastTapAt = 0
+      return
+    }
+
+    const dt = now - lastTapAt
+    const gap = Math.hypot(touch.clientX - lastTapX, touch.clientY - lastTapY)
+    if (dt <= doubleTapMs && gap <= maxTapMovePx * 2) {
+      const rect = drawer.drawerBody?.getBoundingClientRect()
+      const splitX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2
+      const isRightHalf = touch.clientX >= splitX
+
+      if (isRightHalf && canGoNext) {
+        nextPressSignal += 1
+        onNext?.()
+      } else if (!isRightHalf && canGoPrev) {
+        prevPressSignal += 1
+        onPrev?.()
+      }
+      lastTapAt = 0
+      return
+    }
+
+    lastTapAt = now
+    lastTapX = touch.clientX
+    lastTapY = touch.clientY
+  }
 </script>
 
 <div
@@ -77,9 +149,9 @@
         role="presentation"
         class="drawer-body custom-scrollbar"
         style="font-size: var(--font-size-base);"
-        ontouchstart={drawer.onBodyTouchStart}
-        ontouchmove={drawer.onBodyTouchMove}
-        ontouchend={drawer.onBodyTouchEnd}
+        ontouchstart={onSheetTouchStart}
+        ontouchmove={onSheetTouchMove}
+        ontouchend={onSheetTouchEnd}
         ontouchcancel={drawer.onBodyTouchEnd}
       >
         <div
@@ -134,13 +206,23 @@
         class="fixed bottom-0 left-0 right-0 pb-8 pt-4 px-8 bg-linear-to-t from-10% from-bg-2 to-bg-2/0"
       >
         <div class="flex gap-2">
-          <CusButton onclick={onPrev} disabled={!canGoPrev} class="h-12 flex-1">
+          <CusButton
+            onclick={onPrev}
+            disabled={!canGoPrev}
+            pressSignal={prevPressSignal}
+            class="h-12 flex-1"
+          >
             <ChevronLeft class="-translate-x-px" size={20} />
           </CusButton>
           <CusButton onclick={drawer.requestClose} class="h-12 flex-1 px-3 text-xs">
             {currentIndex + 1} / {filteredArticles.length}
           </CusButton>
-          <CusButton onclick={onNext} disabled={!canGoNext} class="h-12 flex-1">
+          <CusButton
+            onclick={onNext}
+            disabled={!canGoNext}
+            pressSignal={nextPressSignal}
+            class="h-12 flex-1"
+          >
             <ChevronRight class="translate-x-px" size={20} />
           </CusButton>
         </div>

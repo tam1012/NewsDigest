@@ -8,6 +8,7 @@
     target?: string
     rel?: string
     disabled?: boolean
+    pressSignal?: number
     onclick?: (e: Event) => void
     [key: string]: unknown
   }
@@ -17,11 +18,13 @@
     children,
     href,
     disabled = false,
+    pressSignal = 0,
     ...rest
   }: Props = $props()
 
   let bgSpanA = $state<HTMLSpanElement | null>(null)
   let bgSpanBtn = $state<HTMLSpanElement | null>(null)
+  let lastPressSignal = $state<number | null>(null)
 
   function playPress(el: HTMLSpanElement | null) {
     el?.animate(
@@ -33,6 +36,21 @@
       { duration: 500, easing: 'cubic-bezier(.22,1,.36,1)' },
     )
   }
+
+  $effect(() => {
+    const signal = pressSignal
+    if (lastPressSignal === null) {
+      lastPressSignal = signal
+      return
+    }
+    if (signal === lastPressSignal) return
+    lastPressSignal = signal
+    if (href) {
+      playPress(bgSpanA)
+    } else if (!disabled) {
+      playPress(bgSpanBtn)
+    }
+  })
 </script>
 
 {#if href}

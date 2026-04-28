@@ -3,17 +3,43 @@ import { Env, Source } from '../types';
 import type { Context } from 'hono';
 import { normalizeDate } from '../utils/date';
 
+type JsonParseResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; response: Response };
+
 // ── Auth ─────────────────────────────────────────────────
 
 /** Check X-Admin-Key header against ADMIN_API_KEY secret. Returns error Response or null. */
 export function requireAdmin(c: Context<{ Bindings: Env }>): Response | null {
   const adminKey = c.env.ADMIN_API_KEY;
-  if (!adminKey) return null; // no key configured → skip check
+  const envName = String(c.env.ENVIRONMENT || c.env.NODE_ENV || '').toLowerCase();
+  const isProd = envName === 'production' || envName === 'prod';
+
+  if (!adminKey) {
+    if (isProd) {
+      return c.json({ error: 'Server misconfigured: ADMIN_API_KEY is required in production' }, 503);
+    }
+    return null; // non-production: allow local/dev usage without key
+  }
+
   const provided = c.req.header('X-Admin-Key');
   if (provided !== adminKey) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
   return null;
+}
+
+export async function safeJson<T = Record<string, unknown>>(
+  c: Context<{ Bindings: Env }>,
+  fallback?: T
+): Promise<JsonParseResult<T>> {
+  try {
+    const data = (await c.req.json()) as T;
+    return { ok: true, data };
+  } catch {
+    if (fallback !== undefined) return { ok: true, data: fallback };
+    return { ok: false, response: c.json({ error: 'Invalid JSON body' }, 400) };
+  }
 }
 
 export { normalizeDate };

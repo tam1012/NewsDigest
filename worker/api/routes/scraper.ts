@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Env } from '../../types';
 import { ScraperConfigRepo } from '../../db';
-import { requireAdmin } from '../utils';
+import { requireAdmin, safeJson } from '../utils';
 
 const scraper = new Hono<{ Bindings: Env }>();
 
@@ -44,7 +44,9 @@ scraper.post('/scraper-profile/test', async (c) => {
     const authErr = requireAdmin(c);
     if (authErr) return authErr;
 
-    const body = await c.req.json().catch(() => ({}));
+    const parsed = await safeJson<{ url?: string; mode?: 'article' | 'listing'; save?: boolean }>(c, {});
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.data;
     const url = body.url;
     const mode = body.mode || 'article';
     const save = body.save !== false; // default: save to DB

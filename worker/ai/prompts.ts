@@ -58,6 +58,7 @@ ${tagList}
 - ALL output fields must be written in ${config.outputLanguage}
 - ONLY return valid JSON — no text or markdown outside the JSON object
 - Assign at most 3 tags, chosen from the allowed list only
+- Preserve product/model/version names exactly as written in the source; do not "correct" them from your knowledge.
 </rules>${customBlock}
 `;
 }
