@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Env } from '../../types';
 import { ArticleRepo } from '../../db';
-import { requireAdmin, safeJson } from '../utils';
+import { requireAdmin } from '../utils';
 import { assertSafePublicHttpUrl } from '../../utils/url-safety';
 
 const articles = new Hono<{ Bindings: Env }>();
@@ -59,9 +59,7 @@ articles.post('/enrich', async (c) => {
     const authErr = requireAdmin(c);
     if (authErr) return authErr;
 
-    const parsed = await safeJson<{ ids?: string[]; force?: boolean }>(c);
-    if (!parsed.ok) return parsed.response;
-    const body = parsed.data;
+    const body = await c.req.json();
     const ids = body.ids;
     const force = body.force === true;
 
@@ -164,9 +162,7 @@ articles.post('/enqueue-scrape', async (c) => {
     const authErr = requireAdmin(c);
     if (authErr) return authErr;
 
-    const parsed = await safeJson<{ limit?: number; force?: boolean }>(c, {});
-    if (!parsed.ok) return parsed.response;
-    const body = parsed.data;
+    const body = await c.req.json().catch(() => ({}));
     const limit = Math.min(body.limit || 50, 200);
     const force = body.force === true;
 
@@ -218,9 +214,7 @@ articles.post('/resummarize', async (c) => {
     const authErr = requireAdmin(c);
     if (authErr) return authErr;
 
-    const parsed = await safeJson<{ limit?: number; delayMs?: number }>(c, {});
-    if (!parsed.ok) return parsed.response;
-    const body = parsed.data;
+    const body = await c.req.json().catch(() => ({}));
     const limit = Math.min(body.limit || 20, 100);
     const delayMs = Math.max(body.delayMs || 3000, 1000);
 

@@ -11,8 +11,6 @@ export interface Env {
   /** Cloudflare AI Gateway URL — required when GEMINI_API_KEY is not set. */
   AI_GATEWAY_URL?: string;
   ADMIN_API_KEY?: string;
-  ENVIRONMENT?: string;
-  NODE_ENV?: string;
 
   // ── Prompt configuration (all optional — see worker/ai/prompt-config.ts) ──
   /** Full language name for AI output, e.g. "Vietnamese", "English". Default: "Vietnamese" */
