@@ -315,7 +315,8 @@
         throw new Error(result.error || 'Fetch thất bại.')
       }
 
-      toast.success(`Fetch ${result.fetched} bài, +${result.inserted} mới.`, {
+      const enqueued = result.enqueued ?? 0;
+      toast.success(`Fetch ${result.fetched} bài, +${result.inserted} mới${enqueued > 0 ? `, ${enqueued} đã vào queue tóm tắt` : ''}.`, {
         id: toastId,
       })
       await fetchSources()

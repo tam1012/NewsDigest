@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { Env } from '../../types';
+import { Env, ContentScrapeMessage } from '../../types';
 import { SourceRepo, ArticleRepo } from '../../db';
 import { requireAdmin, normalizeDate, resolveSource, ALLOWED_SOURCE_TYPES } from '../utils';
 import { stripHtmlToText } from '../../scraper/utils';
@@ -129,6 +129,8 @@ sources.post('/:id/fetch', async (c) => {
     try {
         const articles = await fetchSource(source, c.env);
         let insertedCount = 0;
+        const newArticles: ContentScrapeMessage[] = [];
+
         for (const art of articles) {
             const idValue = crypto.randomUUID();
             const changes = await ArticleRepo.insertOrIgnore(c.env.DB, {
@@ -141,6 +143,7 @@ sources.post('/:id/fetch', async (c) => {
             });
             if (changes > 0) {
                 insertedCount++;
+                newArticles.push({ articleId: idValue, url: art.url, title: art.title });
 
                 // Pre-save content from RSS content:encoded (mirrors cron logic)
                 if (art.contentEncoded) {
@@ -152,9 +155,37 @@ sources.post('/:id/fetch', async (c) => {
                 }
             }
         }
+
+        // ── Enqueue new articles for content scraping + AI summarization ──
+        let enqueuedCount = 0;
+        if (newArticles.length > 0) {
+          const normalArticles = newArticles.filter(a => !a.url.includes('reddit.com'));
+          const redditArticles = newArticles.filter(a => a.url.includes('reddit.com'));
+
+          if (normalArticles.length > 0) {
+            await c.env.CONTENT_QUEUE.sendBatch(
+              normalArticles.map(a => ({ body: a }))
+            );
+            enqueuedCount += normalArticles.length;
+          }
+
+          // Stagger Reddit articles with 15s delay to avoid rate limits
+          if (redditArticles.length > 0) {
+            await c.env.CONTENT_QUEUE.sendBatch(
+              redditArticles.map((a, j) => ({
+                body: a,
+                delaySeconds: j * 15,
+              }))
+            );
+            enqueuedCount += redditArticles.length;
+          }
+
+          console.log(`📤 Enqueued ${enqueuedCount} articles for scraping from manual fetch of "${source.name}"`);
+        }
+
         const lastFetchedAt = await SourceRepo.updateLastFetched(c.env.DB, source.id);
 
-        return c.json({ ok: true, fetched: articles.length, inserted: insertedCount, last_fetched_at: lastFetchedAt });
+        return c.json({ ok: true, fetched: articles.length, inserted: insertedCount, enqueued: enqueuedCount, last_fetched_at: lastFetchedAt });
     } catch (e: any) {
         return c.json({ error: e.message }, 500);
     }
