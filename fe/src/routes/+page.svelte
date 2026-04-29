@@ -4,7 +4,7 @@
   import { goto } from '$app/navigation'
   import { filters } from '$lib/stores/articles.svelte'
   import { prefs, cycleFontSize } from '$lib/stores/prefs'
-  import { Loader2, Settings, Sparkles, X } from 'lucide-svelte'
+  import { Settings, X } from 'lucide-svelte'
   import type { Article } from '$lib/types'
   import { sources } from '$lib/stores/sources'
   import { api } from '$lib/api'
@@ -16,14 +16,12 @@
   import MobileArticleSheet from '$lib/components/app/MobileArticleSheet.svelte'
   import PullToRefresh from '$lib/components/app/PullToRefresh.svelte'
   import WelcomePanel from '$lib/components/app/WelcomePanel.svelte'
-  import { getStoredAdminKey } from '$lib/admin'
   import DateNavigator from '$lib/components/app/DateNavigator.svelte'
   import MobileSettingsSheet from '$lib/components/app/MobileSettingsSheet.svelte'
   import ArticleListSkeleton from '$lib/components/app/ArticleListSkeleton.svelte'
   import DigestView from '$lib/components/app/DigestView.svelte'
   import ArticleListItem from '$lib/components/app/ArticleListItem.svelte'
   import ArticleDetail from '$lib/components/app/ArticleDetail.svelte'
-  import EnqueueToast from '$lib/components/app/EnqueueToast.svelte'
   import ScrollToTopButton from '$lib/components/app/ScrollToTopButton.svelte'
 
   let { data } = $props()
@@ -34,31 +32,6 @@
   // loading: full network fetch with no cache (shows skeleton)
   // initializing: IDB check in progress (shows nothing — avoids flash)
   let loading = $derived(articleCache.loading || articleCache.initializing)
-  let unsummarizedCount = $derived(articleCache.unsummarizedCount)
-
-  let resummarizing = $state(false)
-  // Timestamp (ms) until which the AI button is hidden after enqueue.
-  // null = show button normally.
-  let aiHideUntil = $state<number | null>(null)
-  // Number of articles enqueued in the last action (for the toast message).
-  let lastEnqueued = $state(0)
-  // Whether the toast is visible
-  let showEnqueueToast = $state(false)
-  let isAdmin = $state(false)
-
-  // Derived: is the button still within its hide window?
-  let aiButtonHidden = $derived(
-    aiHideUntil !== null && Date.now() < aiHideUntil,
-  )
-
-  // Human-readable countdown label (e.g. "~2 phút")
-  let aiEstimateLabel = $derived.by(() => {
-    if (!aiHideUntil) return ''
-    const remainSec = Math.ceil((aiHideUntil - Date.now()) / 1000)
-    if (remainSec <= 0) return ''
-    if (remainSec < 60) return `~${remainSec}s`
-    return `~${Math.ceil(remainSec / 60)} phút`
-  })
 
   // ── Mobile / Drawer state ──────────────────────────────────
   let drawerOpen = $state(false)
@@ -88,8 +61,6 @@
 
   onMount(() => {
     fetchSources()
-    // Check admin auth from localStorage (shared with /sources page)
-    isAdmin = getStoredAdminKey().length > 0
 
     // PWA resume: detect when app comes back from background
     // Track what "today" was when the user last saw the page,
@@ -130,44 +101,6 @@
       clearInterval(tickInterval)
     }
   })
-
-  // Resummarize handler
-  async function handleResummarize() {
-    if (resummarizing || aiButtonHidden) return
-    resummarizing = true
-    try {
-      const res = await fetch(api('/api/articles/enqueue-scrape'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      })
-      const result = await res.json()
-      if (result.ok !== false) {
-        const enqueued = result.enqueued ?? 0
-        lastEnqueued = enqueued
-
-        // Estimated processing time: 6s per article, minimum 30s, max 3 minutes
-        const estimatedMs = Math.min(
-          Math.max(30_000, enqueued * 6_000),
-          3 * 60_000,
-        )
-        aiHideUntil = Date.now() + estimatedMs
-
-        // Show toast
-        showEnqueueToast = true
-        setTimeout(() => (showEnqueueToast = false), 6000)
-
-        // Refresh after estimated time so button can reappear if still needed
-        setTimeout(() => {
-          aiHideUntil = null
-          articleCache.forceRefresh(data.currentDate)
-        }, estimatedMs)
-      }
-    } catch (e) {
-      console.error('Resummarize failed', e)
-    } finally {
-      resummarizing = false
-    }
-  }
 
   // Reactive clock tick — re-evaluates todayStr periodically (see interval in onMount)
   let clockTick = $state(Date.now())
@@ -532,32 +465,9 @@
       </CusButton>
     </nav>
 
-    <!-- Enqueue toast (mobile) -->
-    <EnqueueToast
-      show={showEnqueueToast}
-      count={lastEnqueued}
-      estimateLabel={aiEstimateLabel}
-      variant="mobile"
-    />
-
     <div
       class="fixed z-40 flex gap-2 justify-between bottom-0 px-8 pb-8 pt-4 w-full bg-linear-to-t from-bg-1 to-bg-1/0"
     >
-      {#if isAdmin && unsummarizedCount > 0 && !aiButtonHidden}
-        <CusButton
-          onclick={handleResummarize}
-          disabled={resummarizing}
-          class="size-12 px-2 text-xs gap-1"
-          aria-label="Chạy AI tóm tắt ({unsummarizedCount} bài)"
-        >
-          {#if resummarizing}
-            <Loader2 size={14} class="animate-spin" />
-          {:else}
-            <Sparkles size={14} />
-          {/if}
-          <span>{resummarizing ? '...' : `AI (${unsummarizedCount})`}</span>
-        </CusButton>
-      {/if}
       <CusButtonTab
         value={sideView !== 'digest'}
         onchange={(v) => {
@@ -679,28 +589,6 @@
             initialTabWidth={69}
           />
           <SourceFilter {articles} size="sm" />
-          {#if isAdmin && unsummarizedCount > 0 && !aiButtonHidden}
-            <CusButton
-              onclick={handleResummarize}
-              disabled={resummarizing}
-              class="h-8 px-2 text-xs gap-1"
-              aria-label="Chạy AI tóm tắt ({unsummarizedCount} bài)"
-            >
-              {#if resummarizing}
-                <Loader2 size={14} class="animate-spin" />
-              {:else}
-                <Sparkles size={14} />
-              {/if}
-              <span>{resummarizing ? '...' : `AI (${unsummarizedCount})`}</span>
-            </CusButton>
-          {/if}
-          <!-- Enqueue toast (desktop) -->
-          <EnqueueToast
-            show={showEnqueueToast}
-            count={lastEnqueued}
-            estimateLabel={aiEstimateLabel}
-            variant="desktop"
-          />
         </div>
       </nav>
       <div
