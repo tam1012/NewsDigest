@@ -122,7 +122,7 @@
     role="dialog"
     aria-modal="true"
     aria-label="Settings"
-    class="drawer-sheet-panel fixed inset-x-0 bottom-0 h-svh rounded-t-4xl border border-b-0 border-border bg-bg-2 shadow-2xl pointer-events-none flex flex-col"
+    class="drawer-sheet-panel will-change-transform fixed inset-x-0 bottom-0 h-svh rounded-t-4xl border border-b-0 border-border bg-bg-2 shadow-2xl pointer-events-none flex flex-col"
     style="transform: translateY(100%);"
   >
     <!-- Drag handle -->
