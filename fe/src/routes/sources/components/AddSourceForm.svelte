@@ -35,7 +35,7 @@
     />
     <div class="flex gap-2 w-full sm:w-auto">
       <CusButton
-        class="h-10 px-3.5 w-full sm:w-auto text-sm"
+        class="h-12 sm:h-10 px-4 sm:px-3.5 w-full sm:w-auto text-sm"
         disabled={isAdding || !newUrl.trim()}
         onclick={onAdd}
       >

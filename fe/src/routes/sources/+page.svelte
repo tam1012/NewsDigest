@@ -17,12 +17,13 @@
   import SourceDeleteDialog from './components/SourceDeleteDialog.svelte'
   import SourceEditDialog from './components/SourceEditDialog.svelte'
   import AddSourceForm from './components/AddSourceForm.svelte'
+  import LoginDialog from './components/LoginDialog.svelte'
   import { formatRelativeTime, getTypeIcon } from './components/utils'
 
   let loading = $state(true)
   let pageError = $state('')
   let authError = $state('')
-  let showKeyInput = $state(false)
+  let loginDialogOpen = $state(false)
   let adminKey = $state('')
 
   let newUrl = $state('')
@@ -151,15 +152,10 @@
     toast.error(authError)
   }
 
-  function saveAdminKeyFromForm(event: SubmitEvent) {
-    event.preventDefault()
-    const formData = new FormData(event.currentTarget as HTMLFormElement)
-    const key = String(formData.get('admin_key') ?? '').trim()
-    if (!key) return
-
+  function handleLoginSave(key: string) {
     adminKey = saveAdminKey(key)
     authError = ''
-    showKeyInput = false
+    loginDialogOpen = false
     toast.success('Đã lưu admin key.')
   }
 
@@ -167,7 +163,6 @@
     adminKey = ''
     clearAdminKeyStorage()
     authError = ''
-    showKeyInput = false
     toast.message('Đã đăng xuất.')
   }
 
@@ -339,46 +334,27 @@
     <!-- Header -->
     <header class="mb-8">
       <div class="flex items-center justify-between gap-4 mb-6">
-        <CusButton href="/" class="size-9">
-          <ArrowLeft size={18} />
+        <CusButton href="/" class="size-12 sm:size-8">
+          <ArrowLeft size={20} />
         </CusButton>
 
         <div class="flex items-center gap-2">
-          {#if isAuthed}
+    <!-- Add Source (admin only) -->
+    {#if isAuthed}
             <span
               class="text-[0.675rem] text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 mr-1"
             >
               <LockOpen size={11} /> Admin
             </span>
-            <CusButton class="h-8 px-3.5 text-xs" onclick={clearAdminKey}
+            <CusButton class="size-12 sm:size-8" onclick={clearAdminKey}
               >Đăng xuất</CusButton
             >
-          {:else if showKeyInput}
-            <form
-              onsubmit={saveAdminKeyFromForm}
-              class="flex items-center gap-2"
-            >
-              <!-- svelte-ignore a11y_autofocus -->
-              <input
-                type="password"
-                name="admin_key"
-                placeholder="Admin key..."
-                class="h-8 w-40 text-xs rounded-full border border-border bg-transparent px-3 outline-none focus-visible:ring-2 focus-visible:ring-text-main/10 placeholder:text-text-secondary/60 disabled:cursor-not-allowed disabled:opacity-50"
-                autofocus
-              />
-              <CusButton class="h-8 px-3 text-xs" type="submit">Lưu</CusButton>
-              <CusButton
-                class="h-8 px-3 text-xs"
-                type="button"
-                onclick={() => (showKeyInput = false)}>Huỷ</CusButton
-              >
-            </form>
           {:else}
             <CusButton
-              class="h-8 px-3.5 text-xs"
-              onclick={() => (showKeyInput = true)}
+              class="size-12 sm:size-8"
+              onclick={() => (loginDialogOpen = true)}
             >
-              <Lock size={12} class="mr-1.5" /> Đăng nhập
+              <Lock size={16} />
             </CusButton>
           {/if}
         </div>
@@ -399,15 +375,6 @@
       </div>
     </header>
 
-    {#if authError}
-      <div
-        class="mb-5 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl px-4 py-2.5"
-      >
-        🔒 {authError}
-      </div>
-    {/if}
-
-    <!-- Add Source (admin only) -->
     {#if isAuthed}
       <AddSourceForm bind:newUrl bind:newName {isAdding} onAdd={addSource} />
     {/if}
@@ -487,5 +454,16 @@
   onCancel={() => {
     editDialogOpen = false
     editingSource = null
+  }}
+/>
+
+<!-- Login Dialog -->
+<LoginDialog
+  bind:open={loginDialogOpen}
+  {authError}
+  onSave={handleLoginSave}
+  onCancel={() => {
+    loginDialogOpen = false
+    authError = ''
   }}
 />

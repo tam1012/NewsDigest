@@ -52,13 +52,13 @@
 
     <div class="mt-5 flex justify-end gap-2">
       <CusButton
-        class="h-9 px-4 text-sm"
+        class="h-12 sm:h-8 px-4 sm:px-3.5 text-sm sm:text-xs"
         onclick={onCancel}
       >
         Hủy
       </CusButton>
       <CusButton
-        class="h-9 px-4 text-sm"
+        class="h-12 sm:h-8 px-4 sm:px-3.5 text-sm sm:text-xs"
         disabled={isDeleting}
         onclick={onDelete}
       >
