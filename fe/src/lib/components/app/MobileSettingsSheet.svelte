@@ -1,9 +1,12 @@
 <script lang="ts">
   import { prefs, FONT_SIZES } from '$lib/stores/prefs'
-  import { sources } from '$lib/stores/sources'
   import { Sun, Moon, ChevronRight } from 'lucide-svelte'
   import MobileAboutPanel from '$lib/components/app/MobileAboutPanel.svelte'
   import { createDrawer } from '$lib/drawer.svelte'
+
+  const SHEET_TAB_FALLBACK_WIDTH = 96
+  const THEME_TAB_FALLBACK_WIDTH = 42
+  const FONT_TAB_FALLBACK_WIDTH = 64
 
   let {
     open = false,
@@ -21,24 +24,16 @@
   // ── Top-level tab: Settings vs About ──
   let activeTab = $state<'settings' | 'about'>('settings')
 
-  let settingsTabEl = $state<HTMLSpanElement | null>(null)
-  let aboutTabEl = $state<HTMLSpanElement | null>(null)
   let settingsTabW = $state(0)
   let aboutTabW = $state(0)
-  let tabVisible = $state(false)
   let tabIndicator = $state<HTMLSpanElement | null>(null)
+  let settingsTabWidth = $derived(settingsTabW || SHEET_TAB_FALLBACK_WIDTH)
+  let aboutTabWidth = $derived(aboutTabW || SHEET_TAB_FALLBACK_WIDTH)
 
   let tabIndicatorW = $derived(
-    activeTab === 'settings' ? settingsTabW : aboutTabW,
+    activeTab === 'settings' ? settingsTabWidth : aboutTabWidth,
   )
-  let tabIndicatorX = $derived(activeTab === 'settings' ? 0 : settingsTabW)
-
-  $effect(() => {
-    if (settingsTabW > 0) {
-      const t = setTimeout(() => (tabVisible = true), 100)
-      return () => clearTimeout(t)
-    }
-  })
+  let tabIndicatorX = $derived(activeTab === 'settings' ? 0 : settingsTabWidth)
 
   // Reset to settings tab when sheet opens
   $effect(() => {
@@ -60,24 +55,16 @@
   }
 
   // ── Theme segmented control (2-segment, CusButtonTab style) ──
-  let themeTabLight = $state<HTMLSpanElement | null>(null)
-  let themeTabDark = $state<HTMLSpanElement | null>(null)
   let themeTabLightW = $state(0)
   let themeTabDarkW = $state(0)
-  let themeVisible = $state(false)
   let themeIndicator = $state<HTMLSpanElement | null>(null)
+  let themeTabLightWidth = $derived(themeTabLightW || THEME_TAB_FALLBACK_WIDTH)
+  let themeTabDarkWidth = $derived(themeTabDarkW || THEME_TAB_FALLBACK_WIDTH)
 
   let themeIndicatorW = $derived(
-    $prefs.darkMode ? themeTabDarkW : themeTabLightW,
+    $prefs.darkMode ? themeTabDarkWidth : themeTabLightWidth,
   )
-  let themeIndicatorX = $derived($prefs.darkMode ? themeTabLightW : 0)
-
-  $effect(() => {
-    if (themeTabLightW > 0) {
-      const t = setTimeout(() => (themeVisible = true), 100)
-      return () => clearTimeout(t)
-    }
-  })
+  let themeIndicatorX = $derived($prefs.darkMode ? themeTabLightWidth : 0)
 
   function toggleTheme() {
     playPress(themeIndicator)
@@ -85,14 +72,14 @@
   }
 
   // ── Font size 3-segment control ═
-  let fontTab0El = $state<HTMLSpanElement | null>(null)
-  let fontTab1El = $state<HTMLSpanElement | null>(null)
-  let fontTab2El = $state<HTMLSpanElement | null>(null)
   let fontTab0W = $state(0)
   let fontTab1W = $state(0)
   let fontTab2W = $state(0)
-  let fontWidths = $derived([fontTab0W, fontTab1W, fontTab2W])
-  let fontVisible = $state(false)
+  let fontWidths = $derived([
+    fontTab0W || FONT_TAB_FALLBACK_WIDTH,
+    fontTab1W || FONT_TAB_FALLBACK_WIDTH,
+    fontTab2W || FONT_TAB_FALLBACK_WIDTH,
+  ])
   let fontIndicator = $state<HTMLSpanElement | null>(null)
 
   let fontActiveIdx = $derived.by(() => {
@@ -108,13 +95,6 @@
       x += fontWidths[i] || 0
     }
     return x
-  })
-
-  $effect(() => {
-    if (fontTab0W > 0) {
-      const t = setTimeout(() => (fontVisible = true), 100)
-      return () => clearTimeout(t)
-    }
   })
 
   function cycleFont() {
@@ -167,7 +147,6 @@
           role="tab"
           aria-selected={activeTab === 'settings'}
           onclick={() => switchTab('settings')}
-          bind:this={settingsTabEl}
           bind:offsetWidth={settingsTabW}
           class="flex-1 h-12 font-medium flex items-center justify-center transition-colors duration-200 cursor-pointer {activeTab ===
           'settings'
@@ -183,7 +162,6 @@
           role="tab"
           aria-selected={activeTab === 'about'}
           onclick={() => switchTab('about')}
-          bind:this={aboutTabEl}
           bind:offsetWidth={aboutTabW}
           class="flex-1 h-12 font-medium flex items-center justify-center transition-colors duration-200 cursor-pointer {activeTab ===
           'about'
@@ -197,8 +175,7 @@
       <!-- Sliding underline indicator -->
       <span
         bind:this={tabIndicator}
-        class="absolute bottom-0 h-0.5 rounded-full bg-text-main transition-[transform,width,opacity] duration-300 ease-out"
-        class:opacity-0={!tabVisible}
+        class="absolute bottom-0 h-0.5 rounded-full bg-text-main transition-[transform,width] duration-300 ease-out"
         style="width: {tabIndicatorW}px; transform: translateX({tabIndicatorX}px);"
       ></span>
     </div>
@@ -243,14 +220,12 @@
             <!-- Sliding indicator -->
             <span
               bind:this={themeIndicator}
-              class="absolute inset-y-0.75 rounded-full border border-white bg-bg-btn dark:border-white/5 dark:bg-bg-btn dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)] transition-[transform,opacity] duration-400 ease-out"
-              class:opacity-0={!themeVisible}
+              class="absolute inset-y-0.75 rounded-full border border-white bg-bg-btn dark:border-white/5 dark:bg-bg-btn dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)] transition-transform duration-400 ease-out"
               style="width: {themeIndicatorW}px; transform: translateX({themeIndicatorX}px);"
             ></span>
 
             <!-- Sun tab -->
             <span
-              bind:this={themeTabLight}
               bind:offsetWidth={themeTabLightW}
               class="relative z-10 px-3 h-full flex items-center transition-opacity duration-200"
               class:opacity-40={$prefs.darkMode}
@@ -260,7 +235,6 @@
 
             <!-- Moon tab -->
             <span
-              bind:this={themeTabDark}
               bind:offsetWidth={themeTabDarkW}
               class="relative z-10 px-3 h-full flex items-center transition-opacity duration-200"
               class:opacity-40={!$prefs.darkMode}
@@ -291,14 +265,12 @@
             <!-- Sliding indicator -->
             <span
               bind:this={fontIndicator}
-              class="absolute inset-y-0.75 rounded-full border border-white bg-bg-btn dark:border-white/5 dark:bg-bg-btn dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)] transition-[transform,opacity] duration-400 ease-out"
-              class:opacity-0={!fontVisible}
+              class="absolute inset-y-0.75 rounded-full border border-white bg-bg-btn dark:border-white/5 dark:bg-bg-btn dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)] transition-transform duration-400 ease-out"
               style="width: {fontIndicatorW}px; transform: translateX({fontIndicatorX}px);"
             ></span>
 
             <!-- Tab 0: 14px -->
             <span
-              bind:this={fontTab0El}
               bind:offsetWidth={fontTab0W}
               class="relative z-10 w-16 text-center px-3 h-full flex justify-center items-center transition-opacity duration-200"
               class:opacity-40={$prefs.fontSize !== 14}
@@ -308,7 +280,6 @@
 
             <!-- Tab 1: 16px -->
             <span
-              bind:this={fontTab1El}
               bind:offsetWidth={fontTab1W}
               class="relative z-10 w-16 text-center px-3 h-full flex justify-center items-center transition-opacity duration-200"
               class:opacity-40={$prefs.fontSize !== 16}
@@ -318,7 +289,6 @@
 
             <!-- Tab 2: 18px -->
             <span
-              bind:this={fontTab2El}
               bind:offsetWidth={fontTab2W}
               class="relative z-10 w-16 text-center px-3 h-full flex justify-center items-center transition-opacity duration-200"
               class:opacity-40={$prefs.fontSize !== 18}

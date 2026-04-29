@@ -565,6 +565,7 @@
         }}
         tab1Label="News"
         tab2Label="Digest"
+        initialTabWidth={69}
       />
       <SourceFilter {articles} size="md" />
     </div>
@@ -675,6 +676,7 @@
             }}
             tab1Label="News"
             tab2Label="Digest"
+            initialTabWidth={69}
           />
           <SourceFilter {articles} size="sm" />
           {#if isAdmin && unsummarizedCount > 0 && !aiButtonHidden}
@@ -715,7 +717,7 @@
 
       <div
         bind:this={asideEl}
-        class="aside-scroll px-6 py-20 flex-1 overflow-y-auto"
+        class="aside-scroll px-6 py-20 flex-1 overflow-y-auto overflow-x-hidden"
         style="font-size: var(--font-size-base);"
       >
         <!-- Title -->
@@ -769,7 +771,7 @@
       </div>
     </aside>
     <main
-      class="flex-1 py-6 md:px-10 xl:px-16 main-scroll"
+      class="flex-1 py-6 md:px-10 xl:px-16 main-scroll max-w-[55rem]"
       style="background-color: var(--color-bg-2);"
     >
       {#if selectedArticle}

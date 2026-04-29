@@ -105,6 +105,50 @@
   color: hsl(48 5% 74%);
 }
 
+/* ═══════════════ CODE BLOCK OVERFLOW FIX ═══════════════ */
+/* Prevent long code blocks from breaking layout */
+.prose {
+  min-width: 0;          /* allow flex child to shrink below content size */
+  overflow-wrap: break-word;
+}
+
+.prose :where(pre) {
+  overflow-x: auto;
+  max-width: 100%;
+  border-radius: 0.5rem;
+  background-color: hsl(60 3% 13%);
+  color: hsl(48 5% 82%);
+  padding: 1em 1.25em;
+  font-size: 0.8125em;
+  line-height: 1.7;
+  /* Smooth scrollbar for code blocks */
+  scrollbar-width: thin;
+  scrollbar-color: hsl(50 3% 30%) transparent;
+}
+
+.prose :where(pre code) {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+  white-space: pre;           /* keep code formatting, allow horizontal scroll */
+}
+
+/* Light mode code block */
+:root .prose :where(pre) {
+  background-color: hsl(60 3% 13%);
+  color: hsl(48 5% 82%);
+}
+
+/* Dark mode code block */
+.dark .prose :where(pre) {
+  background-color: hsl(60 2% 10%);
+  color: hsl(48 5% 80%);
+  scrollbar-color: hsl(50 3% 25%) transparent;
+}
+
 .dark {
   --background: 222.2 84% 4.9%;
   --foreground: 210 40% 98%;
@@ -316,6 +360,7 @@ a:focus-visible {
 
 .mobile-content {
   padding: 1.25rem 1rem 8rem;
+  overflow-x: hidden;
 }
 
 /**
@@ -354,6 +399,7 @@ a:focus-visible {
 .drawer-body {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   padding: 1.25rem 1rem 8rem;
   overscroll-behavior: contain;

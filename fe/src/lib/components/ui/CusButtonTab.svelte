@@ -4,6 +4,7 @@
     onchange?: (value: boolean) => void
     tab1Label?: string
     tab2Label?: string
+    initialTabWidth?: number
   }
 
   let {
@@ -11,6 +12,7 @@
     onchange,
     tab1Label = 'News',
     tab2Label = 'Digest',
+    initialTabWidth = 64,
   }: Props = $props()
 
   let tab1El = $state<HTMLSpanElement | null>(null)
@@ -18,17 +20,11 @@
   let tab1W = $state(0)
   let tab2W = $state(0)
 
-  let indicatorW = $derived(value ? tab1W : tab2W)
-  let indicatorX = $derived(value ? 0 : tab1W)
-  let visible = $state(false)
+  let tab1Width = $derived(tab1W || initialTabWidth)
+  let tab2Width = $derived(tab2W || initialTabWidth)
+  let indicatorW = $derived(value ? tab1Width : tab2Width)
+  let indicatorX = $derived(value ? 0 : tab1Width)
   let indicatorEl = $state<HTMLSpanElement | null>(null)
-
-  $effect(() => {
-    if (tab1W > 0) {
-      const t = setTimeout(() => (visible = true), 100)
-      return () => clearTimeout(t)
-    }
-  })
 
   function playPress(el: HTMLSpanElement | null) {
     el?.animate([{ scale: '1' }, { scale: '0.85' }, { scale: '1' }], {
@@ -59,8 +55,7 @@
   <!-- Sliding indicator -->
   <span
     bind:this={indicatorEl}
-    class="absolute inset-y-0.75 rounded-full border border-white bg-bg-btn dark:border-white/5 dark:bg-bg-btn dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)] transition-[transform,opacity] duration-400 ease-out"
-    class:opacity-0={!visible}
+    class="absolute inset-y-0.75 rounded-full border border-white bg-bg-btn dark:border-white/5 dark:bg-bg-btn dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)] transition-transform duration-400 ease-out"
     style="width: {indicatorW}px; transform: translateX({indicatorX}px);"
   ></span>
 
