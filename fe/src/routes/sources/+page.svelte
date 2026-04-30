@@ -11,7 +11,7 @@
   import { sources } from '$lib/stores/sources'
   import type { Source } from '$lib/types'
   import { toast } from 'svelte-sonner'
-  import { ArrowLeft, Lock, LockOpen } from 'lucide-svelte'
+  import { ArrowLeft, Lock, LockOpen, LogOut } from 'lucide-svelte'
 
   import SourceItem from './components/SourceItem.svelte'
   import SourceDeleteDialog from './components/SourceDeleteDialog.svelte'
@@ -152,11 +152,41 @@
     toast.error(authError)
   }
 
-  function handleLoginSave(key: string) {
-    adminKey = saveAdminKey(key)
+  let isVerifying = $state(false)
+
+  async function handleLoginSave(key: string) {
+    isVerifying = true
     authError = ''
-    loginDialogOpen = false
-    toast.success('Đã lưu admin key.')
+
+    try {
+      const res = await fetch(api('/api/auth/verify'), {
+        method: 'POST',
+        headers: { 'X-Admin-Key': key.trim() },
+      })
+
+      if (res.status === 401) {
+        authError = 'Admin key không đúng.'
+        return
+      }
+
+      if (res.status === 429) {
+        authError = 'Quá nhiều lần thử. Vui lòng đợi vài phút.'
+        return
+      }
+
+      if (!res.ok) {
+        authError = 'Không thể xác thực. Vui lòng thử lại.'
+        return
+      }
+
+      adminKey = saveAdminKey(key)
+      loginDialogOpen = false
+      toast.success('Đã đăng nhập admin.')
+    } catch {
+      authError = 'Không thể kết nối server.'
+    } finally {
+      isVerifying = false
+    }
   }
 
   function clearAdminKey() {
@@ -310,10 +340,13 @@
         throw new Error(result.error || 'Fetch thất bại.')
       }
 
-      const enqueued = result.enqueued ?? 0;
-      toast.success(`Fetch ${result.fetched} bài, +${result.inserted} mới${enqueued > 0 ? `, ${enqueued} đã vào queue tóm tắt` : ''}.`, {
-        id: toastId,
-      })
+      const enqueued = result.enqueued ?? 0
+      toast.success(
+        `Fetch ${result.fetched} bài, +${result.inserted} mới${enqueued > 0 ? `, ${enqueued} đã vào queue tóm tắt` : ''}.`,
+        {
+          id: toastId,
+        },
+      )
       await fetchSources(false)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Fetch thất bại.'
@@ -322,7 +355,6 @@
       fetchingSourceId = null
     }
   }
-
 </script>
 
 <svelte:head>
@@ -339,16 +371,16 @@
         </CusButton>
 
         <div class="flex items-center gap-2">
-    <!-- Add Source (admin only) -->
-    {#if isAuthed}
+          <!-- Add Source (admin only) -->
+          {#if isAuthed}
             <span
               class="text-[0.675rem] text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 mr-1"
             >
               <LockOpen size={11} /> Admin
             </span>
-            <CusButton class="size-12 sm:size-8" onclick={clearAdminKey}
-              >Đăng xuất</CusButton
-            >
+            <CusButton class="size-12 sm:size-8" onclick={clearAdminKey}>
+              <LogOut size={16} />
+            </CusButton>
           {:else}
             <CusButton
               class="size-12 sm:size-8"
@@ -371,7 +403,6 @@
             {$sources.length} nguồn · {enabledCount} đang bật
           </p>
         </div>
-
       </div>
     </header>
 
@@ -461,6 +492,7 @@
 <LoginDialog
   bind:open={loginDialogOpen}
   {authError}
+  {isVerifying}
   onSave={handleLoginSave}
   onCancel={() => {
     loginDialogOpen = false
