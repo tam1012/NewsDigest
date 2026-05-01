@@ -69,12 +69,12 @@
                 <Dialog.Title
                   class="text-lg font-semibold tracking-tight flex items-center justify-center sm:justify-start gap-2"
                 >
-                  <Lock size={16} /> Đăng nhập Admin
+                  <Lock size={16} /> Admin Sign In
                 </Dialog.Title>
                 <Dialog.Description
                   class="text-sm leading-6 text-text-secondary"
                 >
-                  Nhập admin key để quản lý nguồn tin.
+                  Enter the admin key to manage sources.
                 </Dialog.Description>
               </div>
 
@@ -102,7 +102,7 @@
                     onclick={handleCancel}
                     disabled={isVerifying}
                   >
-                    Huỷ
+                    Cancel
                   </CusButton>
                   <CusButton
                     class="h-12 sm:h-8 px-4 sm:px-3.5 text-sm sm:text-xs"
@@ -111,9 +111,9 @@
                   >
                     {#if isVerifying}
                       <LoaderCircle size={14} class="animate-spin mr-1" />
-                      Đang xác thực...
+                      Verifying...
                     {:else}
-                      Đăng nhập
+                      Sign in
                     {/if}
                   </CusButton>
                 </div>

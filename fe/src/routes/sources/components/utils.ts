@@ -1,13 +1,13 @@
 import { Globe, MessageCircle, Rss, TrendingUp, Youtube } from 'lucide-svelte'
 import type { Source } from '$lib/types'
 
-const relativeTime = new Intl.RelativeTimeFormat('vi', { numeric: 'auto' })
+const relativeTime = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
 
 export function formatRelativeTime(value: string | null) {
-  if (!value) return 'Chưa fetch'
+  if (!value) return 'Never fetched'
 
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'Không rõ'
+  if (Number.isNaN(date.getTime())) return 'Unknown'
 
   const diffMs = date.getTime() - Date.now()
   const absMs = Math.abs(diffMs)

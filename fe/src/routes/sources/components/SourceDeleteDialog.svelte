@@ -41,11 +41,11 @@
               class="grid w-full gap-4 border border-border/60 bg-bg-btn p-6 shadow-lg rounded-3xl sm:max-w-[420px] outline-none pointer-events-auto"
             >
               <div class="flex flex-col space-y-1.5 text-center sm:text-left">
-        <Dialog.Title class="text-lg font-semibold tracking-tight">Xóa nguồn tin?</Dialog.Title>
+        <Dialog.Title class="text-lg font-semibold tracking-tight">Delete source?</Dialog.Title>
         <Dialog.Description class="text-sm leading-6 text-text-secondary">
           {#if deletingSource}
-            Xóa <strong class="text-text-main">{deletingSource.name}</strong> và toàn
-            bộ bài viết liên quan. Không thể hoàn tác.
+            Delete <strong class="text-text-main">{deletingSource.name}</strong> and all
+            related articles. This action cannot be undone.
           {/if}
         </Dialog.Description>
       </div>
@@ -55,7 +55,7 @@
         class="h-12 sm:h-8 px-4 sm:px-3.5 text-sm sm:text-xs"
         onclick={onCancel}
       >
-        Hủy
+        Cancel
       </CusButton>
       <CusButton
         class="h-12 sm:h-8 px-4 sm:px-3.5 text-sm sm:text-xs"
@@ -67,7 +67,7 @@
         {:else}
           <Trash2 size={14} class="mr-1.5" />
         {/if}
-        {isDeleting ? 'Đang xóa...' : 'Xác nhận xóa'}
+        {isDeleting ? 'Deleting...' : 'Confirm delete'}
       </CusButton>
     </div>
             </div>

@@ -65,19 +65,19 @@
               class="grid w-full gap-4 border border-border/60 bg-bg-btn p-6 shadow-lg rounded-3xl sm:max-w-[480px] outline-none pointer-events-auto"
             >
               <div class="flex flex-col space-y-1.5 text-center sm:text-left">
-        <Dialog.Title class="text-lg font-semibold tracking-tight">Sửa nguồn tin</Dialog.Title>
+        <Dialog.Title class="text-lg font-semibold tracking-tight">Edit source</Dialog.Title>
         <Dialog.Description class="text-sm text-text-secondary">
-          Cập nhật thông tin nguồn tin.
+          Update source details.
         </Dialog.Description>
       </div>
 
       <div class="mt-4 flex flex-col gap-4">
         <div class="flex flex-col gap-1.5">
-          <label for="edit-name" class="text-sm font-medium leading-none">Tên nguồn</label>
+          <label for="edit-name" class="text-sm font-medium leading-none">Source name</label>
           <input
             id="edit-name"
             bind:value={editName}
-            placeholder="Tên nguồn tin"
+            placeholder="Source name"
             class="h-10 rounded-xl border border-border/60 bg-transparent px-3.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-text-main/10 placeholder:text-text-secondary/60 disabled:cursor-not-allowed disabled:opacity-50"
           />
         </div>
@@ -87,14 +87,14 @@
           <input
             id="edit-url"
             bind:value={editUrl}
-            placeholder="URL nguồn tin"
+            placeholder="Source URL"
             class="h-10 rounded-xl border border-border/60 bg-transparent px-3.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-text-main/10 placeholder:text-text-secondary/60 disabled:cursor-not-allowed disabled:opacity-50"
           />
         </div>
       </div>
 
       <div class="mt-5 flex justify-end gap-2">
-        <CusButton class="h-12 sm:h-8 px-4 sm:px-3.5 text-sm sm:text-xs" onclick={onCancel}>Hủy</CusButton>
+        <CusButton class="h-12 sm:h-8 px-4 sm:px-3.5 text-sm sm:text-xs" onclick={onCancel}>Cancel</CusButton>
         <CusButton
           class="h-12 sm:h-8 px-4 sm:px-3.5 text-sm sm:text-xs"
           disabled={isEditing || !editName.trim() || !editUrl.trim()}
@@ -105,7 +105,7 @@
         {:else}
           <Pencil size={14} class="mr-1.5" />
         {/if}
-        {isEditing ? 'Đang lưu...' : 'Lưu thay đổi'}
+        {isEditing ? 'Saving...' : 'Save changes'}
       </CusButton>
     </div>
             </div>

@@ -71,7 +71,7 @@
           <span
             class="shrink-0 text-[0.6rem] font-medium uppercase tracking-wider text-text-secondary bg-bg-1 dark:bg-bg-1/60 px-2 py-0.5 rounded-full"
           >
-            Tắt
+            Off
           </span>
         {/if}
       </div>
@@ -102,7 +102,7 @@
         <div class="hidden md:flex items-center gap-1.5">
           <button
             class="flex items-center justify-center size-8 rounded-full text-text-secondary hover:text-text-main hover:bg-bg-1 dark:hover:bg-bg-1/60 transition-colors cursor-pointer disabled:opacity-40"
-            title="Fetch thủ công"
+            title="Manual fetch"
             disabled={isFetching}
             onclick={onManualFetch}
           >
@@ -114,14 +114,14 @@
           </button>
           <button
             class="flex items-center justify-center size-8 rounded-full text-text-secondary hover:text-text-main hover:bg-bg-1 dark:hover:bg-bg-1/60 transition-colors cursor-pointer"
-            title="Sửa nguồn"
+            title="Edit source"
             onclick={onEdit}
           >
             <Pencil size={14} />
           </button>
           <button
             class="flex items-center justify-center size-8 rounded-full text-text-secondary hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
-            title="Xoá nguồn"
+            title="Delete source"
             onclick={onDelete}
           >
             <Trash2 size={14} />
@@ -172,7 +172,7 @@
                         class="text-text-secondary shrink-0"
                       />
                     {/if}
-                    <span class="flex-1 font-medium">Fetch thủ công</span>
+                    <span class="flex-1 font-medium">Manual fetch</span>
                   </button>
 
                   <button
@@ -183,7 +183,7 @@
                     class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-full text-left text-sm transition-colors cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-text-main"
                   >
                     <Pencil size={16} class="text-text-secondary shrink-0" />
-                    <span class="flex-1 font-medium">Sửa nguồn</span>
+                    <span class="flex-1 font-medium">Edit source</span>
                   </button>
 
                   <button
@@ -194,7 +194,7 @@
                     class="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-full text-left text-sm transition-colors cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/30 text-red-600 dark:text-red-400"
                   >
                     <Trash2 size={16} class="shrink-0" />
-                    <span class="flex-1 font-medium">Xoá nguồn</span>
+                    <span class="flex-1 font-medium">Delete source</span>
                   </button>
 
                   <div
@@ -203,7 +203,7 @@
 
                   <div class="flex items-center justify-between px-3 py-2">
                     <span class="text-sm font-medium text-text-main"
-                      >Kích hoạt</span
+                      >Enabled</span
                     >
                     <Switch
                       checked={source.enabled === 1}
@@ -228,7 +228,7 @@
               ? 'bg-emerald-500'
               : 'bg-zinc-400'}"
           ></span>
-          {source.enabled ? 'Bật' : 'Tắt'}
+          {source.enabled ? 'On' : 'Off'}
         </span>
       {/if}
     </div>

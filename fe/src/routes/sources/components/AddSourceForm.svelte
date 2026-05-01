@@ -19,18 +19,18 @@
   <p
     class="text-[0.675rem] font-semibold uppercase tracking-widest text-text-secondary mb-3"
   >
-    Thêm nguồn mới
+    Add new source
   </p>
   <div class="flex flex-col sm:flex-row gap-2">
     <input
       bind:value={newUrl}
       type="url"
-      placeholder="URL nguồn (RSS, Reddit, YouTube, blog...)"
+      placeholder="Source URL (RSS, Reddit, YouTube, blog...)"
       class="h-10 w-full sm:flex-1 rounded-4xl border border-border bg-bg-2 px-3.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-text-main/10 placeholder:text-text-secondary/60 disabled:cursor-not-allowed disabled:opacity-50"
     />
     <input
       bind:value={newName}
-      placeholder="Tên (tuỳ chọn)"
+      placeholder="Name (optional)"
       class="h-10 w-full sm:w-36 rounded-4xl border border-border bg-bg-2 px-3.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-text-main/10 placeholder:text-text-secondary/60 disabled:cursor-not-allowed disabled:opacity-50"
     />
     <div class="flex gap-2 w-full sm:w-auto">
@@ -44,7 +44,7 @@
         {:else}
           <Plus size={14} />
         {/if}
-        <span class="ml-1.5">Thêm</span>
+        <span class="ml-1.5">Add</span>
       </CusButton>
     </div>
   </div>

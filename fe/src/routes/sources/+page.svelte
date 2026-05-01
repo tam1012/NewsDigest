@@ -66,14 +66,14 @@
     pageError = ''
     try {
       const res = await fetch(api('/api/sources'))
-      if (!res.ok) throw new Error('Không thể tải danh sách nguồn tin.')
+      if (!res.ok) throw new Error('Unable to load sources.')
       const data = await res.json()
       $sources = (data.sources ?? []).map(normalizeSource)
     } catch (error) {
       pageError =
         error instanceof Error
           ? error.message
-          : 'Không thể tải danh sách nguồn tin.'
+          : 'Unable to load sources.'
       toast.error(pageError)
     } finally {
       loading = false
@@ -104,7 +104,7 @@
       if (editUrl.trim() !== editingSource.url) body.url = editUrl.trim()
 
       if (Object.keys(body).length === 0) {
-        toast.message('Không có thay đổi.')
+        toast.message('No changes detected.')
         editDialogOpen = false
         editingSource = null
         return
@@ -123,10 +123,10 @@
 
       const result = await res.json()
       if (!res.ok || !result.ok) {
-        throw new Error(result.error || 'Không thể cập nhật.')
+        throw new Error(result.error || 'Unable to update source.')
       }
 
-      toast.success(`Đã cập nhật "${editName.trim()}".`)
+      toast.success(`Updated "${editName.trim()}".`)
       $sources = $sources.map((s) =>
         s.id === editingSource?.id
           ? {
@@ -140,7 +140,7 @@
       editingSource = null
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Không thể cập nhật.'
+        error instanceof Error ? error.message : 'Unable to update source.'
       toast.error(message)
     } finally {
       isEditing = false
@@ -148,7 +148,7 @@
   }
 
   function handleUnauthorized() {
-    authError = 'Admin key không đúng hoặc đã hết hạn.'
+    authError = 'Admin key is invalid or expired.'
     toast.error(authError)
   }
 
@@ -165,25 +165,25 @@
       })
 
       if (res.status === 401) {
-        authError = 'Admin key không đúng.'
+        authError = 'Invalid admin key.'
         return
       }
 
       if (res.status === 429) {
-        authError = 'Quá nhiều lần thử. Vui lòng đợi vài phút.'
+        authError = 'Too many attempts. Please wait a few minutes.'
         return
       }
 
       if (!res.ok) {
-        authError = 'Không thể xác thực. Vui lòng thử lại.'
+        authError = 'Unable to verify. Please try again.'
         return
       }
 
       adminKey = saveAdminKey(key)
       loginDialogOpen = false
-      toast.success('Đã đăng nhập admin.')
+      toast.success('Admin login successful.')
     } catch {
-      authError = 'Không thể kết nối server.'
+      authError = 'Unable to connect to server.'
     } finally {
       isVerifying = false
     }
@@ -193,7 +193,7 @@
     adminKey = ''
     clearAdminKeyStorage()
     authError = ''
-    toast.message('Đã đăng xuất.')
+    toast.message('Signed out.')
   }
 
   async function addSource() {
@@ -220,17 +220,17 @@
 
       const result = await res.json()
       if (!res.ok || !result.ok) {
-        throw new Error(result.error || 'Không thể thêm nguồn tin.')
+        throw new Error(result.error || 'Unable to add source.')
       }
 
-      toast.success(`Đã thêm "${result.source.name}".`)
+      toast.success(`Added "${result.source.name}".`)
       newUrl = ''
       newName = ''
 
       await fetchSources(false)
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Không thể thêm nguồn tin.'
+        error instanceof Error ? error.message : 'Unable to add source.'
       toast.error(message)
     } finally {
       isAdding = false
@@ -272,12 +272,12 @@
 
       const result = await res.json()
       if (!res.ok || !result.ok) {
-        throw new Error(result.error || 'Không thể cập nhật.')
+        throw new Error(result.error || 'Unable to update source.')
       }
     } catch (error) {
       $sources = snapshot
       const message =
-        error instanceof Error ? error.message : 'Không thể cập nhật.'
+        error instanceof Error ? error.message : 'Unable to update source.'
       toast.error(message)
     } finally {
       removeTogglingId(id)
@@ -303,15 +303,15 @@
 
       const result = await res.json()
       if (!res.ok || !result.ok) {
-        throw new Error(result.error || 'Không thể xóa.')
+        throw new Error(result.error || 'Unable to delete source.')
       }
 
-      toast.success(`Đã xóa "${deletingSource.name}".`)
+      toast.success(`Deleted "${deletingSource.name}".`)
       $sources = $sources.filter((source) => source.id !== deletingSource?.id)
       deleteDialogOpen = false
       deletingSource = null
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Không thể xóa.'
+      const message = error instanceof Error ? error.message : 'Unable to delete source.'
       toast.error(message)
     } finally {
       isDeleting = false
@@ -321,7 +321,7 @@
   async function manualFetch(source: Source) {
     fetchingSourceId = source.id
     authError = ''
-    const toastId = toast.loading(`Đang fetch "${source.name}"...`)
+    const toastId = toast.loading(`Fetching "${source.name}"...`)
 
     try {
       const res = await fetch(api(`/api/sources/${source.id}/fetch`), {
@@ -337,19 +337,19 @@
 
       const result = await res.json()
       if (!res.ok || !result.ok) {
-        throw new Error(result.error || 'Fetch thất bại.')
+        throw new Error(result.error || 'Fetch failed.')
       }
 
       const enqueued = result.enqueued ?? 0
       toast.success(
-        `Fetch ${result.fetched} bài, +${result.inserted} mới${enqueued > 0 ? `, ${enqueued} đã vào queue tóm tắt` : ''}.`,
+         `Fetched ${result.fetched} articles, +${result.inserted} new${enqueued > 0 ? `, ${enqueued} queued for summarization` : ''}.`,
         {
           id: toastId,
         },
       )
       await fetchSources(false)
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Fetch thất bại.'
+      const message = error instanceof Error ? error.message : 'Fetch failed.'
       toast.error(message, { id: toastId })
     } finally {
       fetchingSourceId = null
@@ -358,7 +358,7 @@
 </script>
 
 <svelte:head>
-  <title>NewsDigest - Nguồn tin</title>
+  <title>NewsDigest - Sources</title>
 </svelte:head>
 
 <div class="min-h-screen bg-bg-1">
@@ -397,10 +397,10 @@
           <h1
             class="font-serif text-3xl font-bold text-text-main leading-tight"
           >
-            Nguồn tin
+             Sources
           </h1>
           <p class="text-sm text-text-secondary mt-1">
-            {$sources.length} nguồn · {enabledCount} đang bật
+            {$sources.length} sources · {enabledCount} enabled
           </p>
         </div>
       </div>
@@ -435,9 +435,9 @@
       <div
         class="py-20 text-center border border-dashed border-border/60 rounded-2xl text-text-secondary text-sm"
       >
-        Chưa có nguồn tin nào.{isAuthed
-          ? ' Thêm nguồn đầu tiên ở trên.'
-          : ' Đăng nhập admin để thêm.'}
+        No sources yet.{isAuthed
+          ? ' Add your first source above.'
+          : ' Sign in as admin to add one.'}
       </div>
     {:else}
       <div class="flex flex-col divide-y divide-dashed divide-border">
