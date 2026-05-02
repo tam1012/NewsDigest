@@ -30,7 +30,10 @@
       {/snippet}
     </Dialog.Overlay>
 
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0 pointer-events-none">
+    <div
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0 pointer-events-none"
+      style="padding-top: calc(env(safe-area-inset-top, 0px) + 1rem); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);"
+    >
       <Dialog.Content forceMount>
         {#snippet child({ props, open })}
           {#if open}

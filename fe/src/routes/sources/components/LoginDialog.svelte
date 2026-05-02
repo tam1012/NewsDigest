@@ -49,7 +49,8 @@
     </Dialog.Overlay>
 
     <div
-      class="fixed inset-0 z-50 flex justify-center items-start pt-8 p-4 pointer-events-none"
+      class="fixed inset-0 z-50 flex justify-center items-start p-4 pointer-events-none"
+      style="padding-top: calc(env(safe-area-inset-top, 0px) + 2rem);"
     >
       <Dialog.Content forceMount>
         {#snippet child({ props, open })}

@@ -440,12 +440,13 @@
 <div class="md:hidden">
   <div
     class="fixed top-0 left-2 right-2 h-6 pointer-events-none bg-linear-to-b from-10% from-bg-1 to-bg-1/0 z-40"
+    style="height: env(safe-area-inset-top, 0px);"
   ></div>
   <div class="mobile-layout relative bg-bg-1">
     <!-- Mobile Top Header / Navigator -->
     <nav
       class="flex justify-between px-4 py-6"
-      style="opacity: {ptrActive ? 0 : 1}; pointer-events: {ptrActive
+      style="padding-top: calc(env(safe-area-inset-top, 0px) + 1.5rem); opacity: {ptrActive ? 0 : 1}; pointer-events: {ptrActive
         ? 'none'
         : 'auto'}; transition: opacity 0.2s ease;"
     >

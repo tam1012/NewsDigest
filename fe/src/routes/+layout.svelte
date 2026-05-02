@@ -23,10 +23,15 @@
     mounted = true
     isOnline = navigator.onLine
 
-    initBodyScrollbars({
-      target: document.body,
-      cancel: { body: false },
-    })
+    const ua = navigator.userAgent
+    const isIOS = /iPad|iPhone|iPod/.test(ua) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    if (!isIOS) {
+      initBodyScrollbars({
+        target: document.body,
+        cancel: { body: false },
+      })
+    }
 
     // ── Online / Offline events ──────────────────────────
     function handleOnline() {

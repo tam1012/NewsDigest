@@ -229,7 +229,7 @@
 
   .ptr-indicator {
     position: fixed;
-    top: 2rem;
+    top: calc(env(safe-area-inset-top, 0px) + 1rem);
     left: 0;
     right: 0;
     display: flex;

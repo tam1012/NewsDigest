@@ -19,6 +19,7 @@
   import AddSourceForm from './components/AddSourceForm.svelte'
   import LoginDialog from './components/LoginDialog.svelte'
   import { formatRelativeTime, getTypeIcon } from './components/utils'
+  import PullToRefresh from '$lib/components/app/PullToRefresh.svelte'
 
   let loading = $state(true)
   let pageError = $state('')
@@ -362,7 +363,10 @@
 </svelte:head>
 
 <div class="min-h-screen bg-bg-1">
-  <div class="mx-auto max-w-3xl px-4 py-6 sm:px-6">
+  <div
+    class="mx-auto max-w-3xl px-4 py-6 sm:px-6"
+    style="padding-top: calc(env(safe-area-inset-top, 0px) + 1.5rem);"
+  >
     <!-- Header -->
     <header class="mb-8">
       <div class="flex items-center justify-between gap-4 mb-6">
@@ -410,56 +414,58 @@
       <AddSourceForm bind:newUrl bind:newName {isAdding} onAdd={addSource} />
     {/if}
 
-    <!-- Sources List -->
-    {#if loading}
-      <div class="flex flex-col gap-3 animate-pulse">
-        {#each Array(5) as _, i (i)}
-          <div class="rounded-xl border border-border/40 p-4">
-            <div class="flex items-center gap-3">
-              <div
-                class="size-8 rounded-full bg-zinc-200 dark:bg-zinc-800"
-              ></div>
-              <div class="flex-1">
+    <PullToRefresh onRefresh={() => fetchSources(false)} disabled={loading}>
+      <!-- Sources List -->
+      {#if loading}
+        <div class="flex flex-col gap-3 animate-pulse">
+          {#each Array(5) as _, i (i)}
+            <div class="rounded-xl border border-border/40 p-4">
+              <div class="flex items-center gap-3">
                 <div
-                  class="h-4 w-40 rounded bg-zinc-200 dark:bg-zinc-800 mb-2"
+                  class="size-8 rounded-full bg-zinc-200 dark:bg-zinc-800"
                 ></div>
-                <div
-                  class="h-3 w-64 rounded bg-zinc-200 dark:bg-zinc-800"
-                ></div>
+                <div class="flex-1">
+                  <div
+                    class="h-4 w-40 rounded bg-zinc-200 dark:bg-zinc-800 mb-2"
+                  ></div>
+                  <div
+                    class="h-3 w-64 rounded bg-zinc-200 dark:bg-zinc-800"
+                  ></div>
+                </div>
               </div>
             </div>
-          </div>
-        {/each}
-      </div>
-    {:else if $sources.length === 0}
-      <div
-        class="py-20 text-center border border-dashed border-border/60 rounded-2xl text-text-secondary text-sm"
-      >
-        No sources yet.{isAuthed
-          ? ' Add your first source above.'
-          : ' Sign in as admin to add one.'}
-      </div>
-    {:else}
-      <div class="flex flex-col divide-y divide-dashed divide-border">
-        {#each sortedSources as source (source.id)}
-          {@const typeInfo = getTypeIcon(source.type)}
-          {@const isFetching = fetchingSourceId === source.id}
-          {@const isToggling = togglingIds.includes(source.id)}
-          <SourceItem
-            {source}
-            {isAuthed}
-            {isFetching}
-            {isToggling}
-            {typeInfo}
-            formattedTime={formatRelativeTime(source.last_fetched_at)}
-            onManualFetch={() => manualFetch(source)}
-            onEdit={() => openEditDialog(source)}
-            onDelete={() => openDeleteDialog(source)}
-            onToggle={() => toggleSource(source.id, source.enabled)}
-          />
-        {/each}
-      </div>
-    {/if}
+          {/each}
+        </div>
+      {:else if $sources.length === 0}
+        <div
+          class="py-20 text-center border border-dashed border-border/60 rounded-2xl text-text-secondary text-sm"
+        >
+          No sources yet.{isAuthed
+            ? ' Add your first source above.'
+            : ' Sign in as admin to add one.'}
+        </div>
+      {:else}
+        <div class="flex flex-col divide-y divide-dashed divide-border">
+          {#each sortedSources as source (source.id)}
+            {@const typeInfo = getTypeIcon(source.type)}
+            {@const isFetching = fetchingSourceId === source.id}
+            {@const isToggling = togglingIds.includes(source.id)}
+            <SourceItem
+              {source}
+              {isAuthed}
+              {isFetching}
+              {isToggling}
+              {typeInfo}
+              formattedTime={formatRelativeTime(source.last_fetched_at)}
+              onManualFetch={() => manualFetch(source)}
+              onEdit={() => openEditDialog(source)}
+              onDelete={() => openDeleteDialog(source)}
+              onToggle={() => toggleSource(source.id, source.enabled)}
+            />
+          {/each}
+        </div>
+      {/if}
+    </PullToRefresh>
   </div>
 </div>
 
