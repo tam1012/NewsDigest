@@ -33,3 +33,10 @@ export async function upsert(
     params.totalFetched
   ).run();
 }
+
+export async function deleteOlderThanDate(db: D1Database, cutoffDate: string): Promise<number> {
+  const result = await db.prepare(
+    'DELETE FROM digests WHERE digest_date < ?'
+  ).bind(cutoffDate).run();
+  return result.meta?.changes ?? 0;
+}

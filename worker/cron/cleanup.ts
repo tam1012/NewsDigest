@@ -1,21 +1,22 @@
 import { Env } from '../types';
-import { ArticleRepo } from '../db';
+import { ArticleRepo, DigestRepo } from '../db';
 
 export async function cleanOldContent(env: Env): Promise<void> {
   console.log(`🧹 Cleanup cron triggered at ${new Date().toISOString()}`);
 
-  // Bài đã quá 7 ngày, chưa summarize được, nội dung cào về không còn tác dụng
-  // -> SET content = NULL để dọn dẹp không để rác DB
-  const oldCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  // Retention policy: keep only last 30 days (UTC)
+  const retentionDays = 30;
+  const oldCutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+  const oldDigestCutoffDate = oldCutoff.slice(0, 10);
   
   try {
-    const changes = await ArticleRepo.cleanOldUnsummarized(env.DB, oldCutoff);
+    const deletedArticles = await ArticleRepo.deleteOlderThan(env.DB, oldCutoff);
+    const deletedDigests = await DigestRepo.deleteOlderThanDate(env.DB, oldDigestCutoffDate);
 
-    if (changes > 0) {
-      console.log(`✅ Freed content for ${changes} old articles (> 7 days).`);
-    } else {
-      console.log(`✅ No old articles needed cleanup.`);
-    }
+    console.log(
+      `✅ Cleanup done. Deleted ${deletedArticles} articles older than ${oldCutoff}; ` +
+      `deleted ${deletedDigests} digests older than ${oldDigestCutoffDate}.`
+    );
   } catch (error: any) {
     console.error(`❌ Cleanup failed:`, error.message);
   }

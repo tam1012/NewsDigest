@@ -80,7 +80,7 @@ compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
 
 [triggers]
-crons = ["0 */3 * * *", "0 1 * * *"]
+crons = ["0 */3 * * *", "0 1 * * *", "*/30 * * * *", "30 23 * * *"]
 
 [[queues.producers]]
 queue = "${env.QUEUE_NAME}"

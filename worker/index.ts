@@ -13,10 +13,17 @@ export default {
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     const isRetryOnlyCron = event.cron === '*/30 * * * *';
     const isGitHubTrendingCron = event.cron === '0 1 * * *';
+    const isRetentionCleanupCron = event.cron === '30 23 * * *';
 
     if (isRetryOnlyCron) {
       // Cron 30 phút: chỉ retry bản tin lỗi, không scrape thêm nguồn mới
       await retryFailedArticles(env);
+      return;
+    }
+
+    if (isRetentionCleanupCron) {
+      // Cron daily at 23:30 UTC: dọn dữ liệu cũ theo retention policy
+      await cleanOldContent(env);
       return;
     }
 
@@ -27,8 +34,7 @@ export default {
     if (!isGitHubTrendingCron) {
       await scheduledDigest(env);
     } else {
-      // Cron daily (github-trending) chạy 1 lần lúc 01:00 UTC -> Kèm luôn job dọn rác 7 ngày
-      await cleanOldContent(env);
+      // Cron daily (github-trending) chạy 1 lần lúc 01:00 UTC
     }
   },
   async queue(batch: MessageBatch<ContentScrapeMessage>, env: Env, ctx: ExecutionContext): Promise<void> {

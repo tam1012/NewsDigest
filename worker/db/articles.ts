@@ -259,6 +259,14 @@ export async function cleanOldUnsummarized(db: D1Database, cutoff: string): Prom
   return result.meta?.changes ?? 0;
 }
 
+/** Delete articles older than cutoff timestamp (ISO 8601 UTC). */
+export async function deleteOlderThan(db: D1Database, cutoff: string): Promise<number> {
+  const result = await db.prepare(
+    'DELETE FROM articles WHERE published_at < ?'
+  ).bind(cutoff).run();
+  return result.meta?.changes ?? 0;
+}
+
 export async function deleteBySourceId(db: D1Database, sourceId: string): Promise<void> {
   await db.prepare('DELETE FROM articles WHERE source_id = ?').bind(sourceId).run();
 }
