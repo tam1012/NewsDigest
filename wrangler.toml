@@ -1,0 +1,31 @@
+# managed-by-cf-init
+name = "newsdigest"
+main = "worker/index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+AI_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/4ade94c28880b53876bf8cd0c604e426/newsdigest/google-ai-studio"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "newsdigest"
+database_id = "1ab23de3-3ed3-4685-8a9b-b427ea94a502"
+
+[[kv_namespaces]]
+binding = "SCRAPER_CONFIG"
+id = "bd78d3ac29eb432682cb60de67df3f9f"
+
+[triggers]
+crons = ["0 */3 * * *", "0 1 * * *", "*/30 * * * *", "30 23 * * *"]
+
+[[queues.producers]]
+queue = "article-content-queue"
+binding = "CONTENT_QUEUE"
+
+[[queues.consumers]]
+queue = "article-content-queue"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "article-content-dlq"

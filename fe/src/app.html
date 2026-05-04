@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+		<meta name="theme-color" content="#f1f1ee" media="(prefers-color-scheme: light)" />
+		<meta name="theme-color" content="#222221" media="(prefers-color-scheme: dark)" />
+		<script>
+			// Apply dark mode immediately to prevent flash of light theme
+			(function() {
+				var saved = localStorage.getItem('darkMode');
+				var dark = saved !== null ? saved === 'true' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+				if (dark) {
+					document.documentElement.classList.add('dark');
+					// Update theme-color meta tags for status bar
+					var metas = document.querySelectorAll('meta[name="theme-color"]');
+					for (var i = 0; i < metas.length; i++) {
+						metas[i].setAttribute('content', '#222221');
+						metas[i].removeAttribute('media');
+					}
+				}
+				// Apply font size immediately to prevent flash
+				var fs = localStorage.getItem('fontSize');
+				if (fs && /^(14|16|18)$/.test(fs)) {
+					document.documentElement.style.setProperty('--font-size-base', fs + 'px');
+				}
+			})();
+		</script>
+		<link rel="icon" href="/favicon.ico" sizes="32x32" />
+		<link rel="icon" href="/favicon.png" type="image/png" />
+		<link rel="manifest" href="/manifest.json" />
+		<link rel="apple-touch-icon" href="/icon-192.png" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>
